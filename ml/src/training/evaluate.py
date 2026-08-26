@@ -61,6 +61,7 @@ async def run_item(engine: Engine, item: dict[str, Any]) -> dict[str, Any]:
         pair=Pair(pair_id=str(item["id"]), language=item["language"], code_path=str(item["id"]), prose=prose_now, code=code_now),
         base=Snapshot(prose=item["prose"], code=item["code"], blocks=blocks),
         change=Change(side=changed),
+        other_side_dirty=bool(item.get("other_side_dirty", False)),
     )
     t0 = time.time()
     try:
@@ -76,12 +77,13 @@ async def run_item(engine: Engine, item: dict[str, Any]) -> dict[str, Any]:
     # fragile, so recompute it the same way the engine does)
     from prosesync.align import affected, realign
 
-    shifted, hunks, _ = realign(req.base, prose_now, code_now, item["language"], changed, False, engine.min_block_lines)
+    shifted, hunks, _ = realign(req.base, prose_now, code_now, item["language"], changed, req.other_side_dirty, engine.min_block_lines)
     _, editable = affected(shifted, hunks, changed, int(engine.cfg.sync.context_blocks))
     scores = score(
         language=item["language"], target=target, before=before, after=after, expected=item.get("expected"),
         blocks_before=shifted, blocks_after=resp.blocks, editable=editable, warnings=resp.warnings,
         expected_contains=item.get("expected_contains", ()),
+        expected_absent=item.get("expected_absent", ()),
     )
     return {
         "id": item["id"], "target": target, "latency_ms": latency, "model": resp.model, "edits": len(resp.line_edits),

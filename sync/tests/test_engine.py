@@ -50,7 +50,7 @@ def test_sync_rejects_edits_outside_editable_set(engine):
             return await super().complete_json(messages, schema, schema_name, None, model, **kw)
 
     engine.backend = Rogue()
-    prose = gen.prose.replace("Describes: `class Cache:`", "Describes: `class Cache:` and more")
+    prose = gen.prose.replace("describes `class Cache:`", "describes `class Cache:` and more")
     req = SyncRequest(
         request_id="r2",
         pair=Pair(pair_id="p", language="python", code_path="x.py", prose=prose, code=PY_CODE),
@@ -87,7 +87,7 @@ def test_verification_repair_round(tmp_path):
 
     engine = Engine(cfg, Flaky())
     gen = asyncio.run(engine.generate(PY_CODE, "python", "x.py"))
-    prose = gen.prose.replace("Describes: `class Cache:`", "Describes: `class Cache:` returning None when missing")
+    prose = gen.prose.replace("describes `class Cache:`", "describes `class Cache:` returning None when missing")
     req = SyncRequest(
         request_id="r4", pair=Pair(pair_id="p", language="python", code_path="x.py", prose=prose, code=PY_CODE),
         base=Snapshot(prose=gen.prose, code=PY_CODE, blocks=gen.blocks), change=Change(side="prose"),

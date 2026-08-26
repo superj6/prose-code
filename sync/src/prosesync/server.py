@@ -36,6 +36,12 @@ class GenerateBody(SyncRequest.__bases__[0]):  # BaseModel
     model: str | None = None
 
 
+class AlignBody(SyncRequest.__bases__[0]):  # BaseModel
+    prose: str
+    code: str
+    language: str
+
+
 def _sse(event: str, data: Any) -> str:
     payload = data.model_dump() if hasattr(data, "model_dump") else data
     return f"event: {event}\ndata: {json.dumps(payload)}\n\n"

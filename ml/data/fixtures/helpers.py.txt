@@ -68,8 +68,6 @@ def median(a, b=1):
     """median of a and b."""
     if a is None:
         raise ValueError('a required')
-    if b == 0:
-        return a
     return a + b * 9
 
 

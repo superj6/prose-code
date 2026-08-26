@@ -25,8 +25,8 @@ gen:              ## make FILE=examples/calc.py gen
 sync:             ## make FILE=examples/calc.py SIDE=code sync
 	$(PY) -m prosesync.cli --backend $(or $(BACKEND),openai) sync $(FILE) --changed $(or $(SIDE),code)
 
-eval:             ## make eval [BACKEND=mock] [ITEMS=ml/data/eval_v0.jsonl]
-	$(PY) ml/src/training/evaluate.py --backend $(or $(BACKEND),openai) --items $(or $(ITEMS),ml/data/eval_v0.jsonl) $(if $(OVERRIDE),--override $(OVERRIDE))
+eval:             ## make eval [BACKEND=mock] [ITEMS=ml/data/eval_v1.jsonl]
+	$(PY) ml/src/training/evaluate.py --backend $(or $(BACKEND),openai) --items $(or $(ITEMS),ml/data/eval_v1.jsonl) $(if $(OVERRIDE),--override $(OVERRIDE))
 
 lint:
 	.venv/bin/ruff check sync ml

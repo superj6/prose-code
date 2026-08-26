@@ -41,7 +41,7 @@ class MockBackend:
             paragraphs = []
             for bid, body in _BLOCK_RE.findall(code_part):
                 first = next((ln.strip() for ln in body.split("\n") if ln.strip()), "(empty)")
-                paragraphs.append({"block": bid, "prose": f"## block {bid}\nDescribes: `{first}`"})
+                paragraphs.append({"block": bid, "prose": f"Block {bid}: describes `{first}`"})
             obj = {"paragraphs": paragraphs}
         else:
             target = _TARGET_RE.search(user).group(1).lower()
@@ -55,7 +55,7 @@ class MockBackend:
                 body = bodies.get(bid, "")
                 first = next((ln.strip() for ln in body.split("\n") if ln.strip()), "")
                 if target == "prose":
-                    text = f"## block {bid}\nDescribes: `{first}` (updated)"
+                    text = f"Block {bid}: describes `{first}` (updated)"
                 else:
                     text = f"# {first}\npass"
                 edits.append({"op": "replace", "block": bid, "text": text, "reason": "mock update"})

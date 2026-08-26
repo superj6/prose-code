@@ -43,6 +43,7 @@ def score(
     *, language: str, target: Side, before: str, after: str, expected: str | None, blocks_before: Sequence[Block],
     blocks_after: Sequence[Block], editable: Sequence[str], warnings: Sequence[str],
     expected_contains: Sequence[str] = (),
+    expected_absent: Sequence[str] = (),
 ) -> dict[str, float]:
     out: dict[str, float] = {}
     out["schema_valid"] = 0.0 if any("invalid" in w or "rejected" in w for w in warnings) else 1.0
@@ -56,7 +57,13 @@ def score(
         out["similarity"] = similarity(after, expected)
         out["exact"] = float(after.strip() == expected.strip())
     if expected_contains:
-        out["contains"] = sum(1 for s in expected_contains if s in after) / len(expected_contains)
+        # each item is a substring or a list of alternative substrings
+        hits = sum(1 for e in expected_contains if any(alt in after for alt in ([e] if isinstance(e, str) else e)))
+        out["contains"] = hits / len(expected_contains)
+    if expected_absent:
+        out["absent"] = sum(1 for s in expected_absent if s not in after) / len(expected_absent)
+    if expected_contains or expected_absent:
+        out["correct"] = float(out.get("contains", 1.0) == 1.0 and out.get("absent", 1.0) == 1.0)
     return out
 
 
@@ -65,7 +72,7 @@ def reward(scores: dict[str, float]) -> float:
     if scores.get("schema_valid", 1.0) < 1.0:
         return 0.0
     r = 0.35 * scores.get("syntax_valid", 1.0) + 0.25 * (1.0 - scores.get("collateral", 0.0))
-    r += 0.40 * scores.get("similarity", scores.get("contains", scores.get("changed", 0.0)))
+    r += 0.40 * scores.get("similarity", scores.get("correct", scores.get("changed", 0.0)))
     return r
 
 
