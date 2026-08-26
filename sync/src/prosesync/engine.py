@@ -19,6 +19,7 @@ from .models import (
     GenerateResponse,
     LineEdit,
     Pair,
+    Preview,
     Snapshot,
     SyncBackend,
     SyncRequest,
@@ -29,6 +30,7 @@ from .prompts import build_generate_messages, build_sync_messages
 from .prompts.schema import EDITS_SCHEMA, PARAGRAPHS_SCHEMA
 
 LineEditCallback = Callable[[LineEdit], Awaitable[None]]
+PreviewCallback = Callable[[Preview], Awaitable[None]]
 
 
 def pair_id_for(path: str) -> str:
@@ -51,7 +53,9 @@ class Engine:
             return GenerateResponse(prose="", blocks=[], model=self.backend.name)
         blocks = B.make_blocks([(i, i + 1) for i in range(len(code_ranges))], code_ranges)
         messages = build_generate_messages(language=language, code=code, blocks=blocks, version=self.prompt_version)
-        result = await self.backend.complete_json(messages, PARAGRAPHS_SCHEMA, "paragraphs", model=model)
+        result = await self.backend.complete_json(
+            messages, PARAGRAPHS_SCHEMA, "paragraphs", model=model, cache_key=f"prosesync:{pair_id_for(code_path)}"
+        )
         import json
 
         by_block = {p["block"]: p["prose"] for p in json.loads(result.raw)["paragraphs"]}
@@ -77,7 +81,9 @@ class Engine:
         return resp
 
     # ------------------------------------------------------------------ sync
-    async def sync(self, req: SyncRequest, on_line_edit: LineEditCallback | None = None) -> SyncResponse:
+    async def sync(
+        self, req: SyncRequest, on_line_edit: LineEditCallback | None = None, on_preview: PreviewCallback | None = None
+    ) -> SyncResponse:
         t0 = time.time()
         pair, changed = req.pair, req.change.side
         target = other_side(changed)
@@ -124,12 +130,28 @@ class Engine:
                 if on_line_edit is not None:
                     await on_line_edit(le)
 
+        preview_state = {"last": 0.0, "block": None}
+        interval = float(self.cfg.sync.get("preview_interval_ms", 150)) / 1000.0
+
+        async def on_partial(block: str | None, text: str) -> None:
+            if on_preview is None or not self.cfg.sync.get("preview", True) or not block or block not in state.ids:
+                return
+            now = time.time()
+            if now - preview_state["last"] < interval and block == preview_state["block"]:
+                return
+            preview_state["last"], preview_state["block"] = now, block
+            start, _ = state.line_range(target, state.index_of(block))
+            await on_preview(Preview(side=target, block=block, start=start, text=text))
+
         messages = build_sync_messages(
             language=pair.language, prose=pair.prose, code=pair.code, blocks=blocks, changed=changed, hunks=hunks,
             affected=core, editable=editable, other_side_dirty=req.other_side_dirty, other_hunks=other_hunks,
             version=self.prompt_version,
         )
-        result = await self.backend.complete_json(messages, EDITS_SCHEMA, "edits", on_object=on_object, model=req.options.model)
+        result = await self.backend.complete_json(
+            messages, EDITS_SCHEMA, "edits", on_object=on_object, model=req.options.model, on_partial=on_partial,
+            cache_key=f"prosesync:{pair.pair_id}",
+        )
         result_holder["raw"] = result.raw
         resp = self._response(req, target, state, line_edits, t0, result.model, result.usage, warnings)
         self.log.write(

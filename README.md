@@ -77,6 +77,19 @@ is the training signal for the custom model.
   cancels in-flight requests when you keep typing, and drops a response if you edited the target
   side while it was in flight.
 
+## Latency knobs
+
+All in `configs/base.yaml` (`sync.*`), overridable with `--override sync.key=value`:
+
+- `reasoning_effort` (`low` by default): biggest lever on the API model; re-check quality on the eval set when changing it.
+- Prompt layout is cache-oriented — system prompt, then both documents in a fixed order with no
+  per-request markers, then the diff/instructions — and every request carries
+  `prompt_cache_key=<pair id>`. Consecutive syncs of the same pair hit the provider's prefix
+  cache for everything up to the first changed block (`cache_hit` column in the eval report).
+- `preview` streams the block text as it is generated; the editor shows it as ghost text on the
+  block being rewritten, so the first feedback arrives well before the edit lands.
+- `service_tier` (e.g. `priority`) is passed through if set.
+
 ## Evaluate a backend
 
 ```sh

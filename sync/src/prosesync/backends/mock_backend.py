@@ -13,7 +13,7 @@ from typing import Any
 
 from ..models import BackendResult
 
-_AFFECTED_RE = re.compile(r"^\[(b\d+) AFFECTED\]\n(.*?)(?=\n\n\[b\d+|\n\n===|\Z)", re.DOTALL | re.MULTILINE)
+_AFFECTED_LIST_RE = re.compile(r"^Affected blocks: (.*?)\.", re.MULTILINE)
 _TARGET_RE = re.compile(r"Produce edits to the (PROSE|CODE) side")
 _BLOCK_RE = re.compile(r"^\[(b\d+)\]\n(.*?)(?=\n\n\[b\d+|\n\n|\Z)", re.DOTALL | re.MULTILINE)
 
@@ -31,6 +31,8 @@ class MockBackend:
         schema_name: str,
         on_object: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
         model: str | None = None,
+        on_partial: Callable[[str | None, str], Awaitable[None]] | None = None,
+        cache_key: str | None = None,
     ) -> BackendResult:
         user = messages[-1]["content"]
         self.calls.append({"messages": messages, "schema_name": schema_name})
@@ -45,8 +47,12 @@ class MockBackend:
             target = _TARGET_RE.search(user).group(1).lower()
             source_section = user.split("=== CODE ===" if target == "prose" else "=== PROSE ===", 1)[1]
             source_section = source_section.split("\n===", 1)[0]  # stop at the next section header
+            listed = _AFFECTED_LIST_RE.search(user).group(1)
+            affected = [b.strip() for b in listed.split(",") if b.strip().startswith("b")]
+            bodies = dict(_BLOCK_RE.findall(source_section))
             edits = []
-            for bid, body in _AFFECTED_RE.findall(source_section):
+            for bid in affected:
+                body = bodies.get(bid, "")
                 first = next((ln.strip() for ln in body.split("\n") if ln.strip()), "")
                 if target == "prose":
                     text = f"## block {bid}\nDescribes: `{first}` (updated)"
@@ -55,7 +61,10 @@ class MockBackend:
                 edits.append({"op": "replace", "block": bid, "text": text, "reason": "mock update"})
             obj = {"edits": edits}
         raw = json.dumps(obj)
-        if on_object is not None:
-            for item in next(iter(obj.values())):
+        for item in next(iter(obj.values())):
+            if on_partial is not None and "text" in item:
+                await on_partial(item["block"], item["text"][: len(item["text"]) // 2])
+                await on_partial(item["block"], item["text"])
+            if on_object is not None:
                 await on_object(item)
         return BackendResult(raw=raw, model="mock", usage={"input_tokens": 0, "output_tokens": 0})

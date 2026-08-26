@@ -87,6 +87,8 @@ async def run_item(engine: Engine, item: dict[str, Any]) -> dict[str, Any]:
         "id": item["id"], "target": target, "latency_ms": latency, "model": resp.model, "edits": len(resp.line_edits),
         "warnings": resp.warnings, "scores": scores, "reward": reward(scores), "after": after,
         "tokens_out": resp.usage.get("output_tokens"),
+        "tokens_in": resp.usage.get("input_tokens"),
+        "cached_in": (resp.usage.get("input_tokens_details") or {}).get("cached_tokens"),
     }
 
 
@@ -98,6 +100,9 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
         vals = [r["scores"][k] for r in ok if k in r["scores"]]
         summary[k] = round(statistics.mean(vals), 3) if vals else None
     if ok:
+        tin = sum(r.get("tokens_in") or 0 for r in ok)
+        if tin:
+            summary["cache_hit"] = round(sum(r.get("cached_in") or 0 for r in ok) / tin, 3)
         lat = sorted(r["latency_ms"] for r in ok)
         summary["latency_p50_ms"] = lat[len(lat) // 2]
         summary["latency_p95_ms"] = lat[min(len(lat) - 1, int(len(lat) * 0.95))]

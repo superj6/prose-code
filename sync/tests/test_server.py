@@ -31,9 +31,10 @@ def test_generate_sync_feedback_roundtrip(tmp_path):
     with client.stream("POST", "/sync", json=req) as r:
         events = _events(r.read().decode())
     kinds = [k for k, _ in events]
-    assert kinds == ["edit", "done"]
-    assert events[0][1]["block"] == "b1" and events[0][1]["side"] == "prose"
-    assert events[1][1]["base_code_version"] == 9 and events[1][1]["code"] == code
+    assert kinds[0] == "preview" and kinds[-2:] == ["edit", "done"]
+    assert events[0][1]["block"] == "b1" and events[0][1]["start"] == 0
+    assert events[-2][1]["block"] == "b1" and events[-2][1]["side"] == "prose"
+    assert events[-1][1]["base_code_version"] == 9 and events[-1][1]["code"] == code
     assert client.post("/feedback", json={"sync_id": "r1", "outcome": "accepted", "dwell_s": 30}).json() == {"ok": True}
 
 

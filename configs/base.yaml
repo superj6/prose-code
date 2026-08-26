@@ -9,6 +9,10 @@ sync:
   max_edits: 6                    # server rejects responses with more block edits than this
   context_blocks: 1               # neighbours on each side of an affected block that the model may also edit
   timeout_s: 60
+  service_tier: null              # e.g. "priority" for lower latency at higher cost (Responses API)
+  reasoning_effort: "low"         # null = model default. low: same 3/3 on eval_v0, p50 2.4s->1.9s warm (2026-08-26)
+  preview: true                   # stream partial block text to the editor while an edit is generated
+  preview_interval_ms: 150
   temperature: null            # null = omit (reasoning models reject it)
 
 segment:

@@ -14,8 +14,11 @@ def test_sync_prompt_marks_affected_and_direction():
     )
     assert msgs[0]["role"] == "system" and "block-level edits" in msgs[0]["content"]
     u = msgs[1]["content"]
-    assert "[b2 AFFECTED]" in u and "[b1]" in u and "Produce edits to the PROSE side" in u
+    assert "[b1]" in u and "[b2]" in u and "AFFECTED" not in u and "Produce edits to the PROSE side" in u
+    assert "Affected blocks: b2. Editable blocks: b1, b2, b3." in u
     assert "@@ -8,1 +8,1 @@\n-x\n+y" in u
+    # cache layout: documents precede everything request-specific
+    assert u.index("=== CODE ===") < u.index("=== PROSE ===") < u.index("=== CHANGE") < u.index("Affected blocks")
 
 
 def test_generate_prompt_lists_blocks():

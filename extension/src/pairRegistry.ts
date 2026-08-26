@@ -104,6 +104,7 @@ export class PairRegistry implements vscode.Disposable {
       {
         setStatus: (state, detail) => this.status.set(state, detail),
         showEdit: (side, le) => this.decorations.show(side === "prose" ? proseDoc : codeDoc, le),
+        showPreview: (pv) => this.decorations.showPreview(pv.side === "prose" ? proseDoc : codeDoc, pv),
         clearEdits: () => this.decorations.clear(),
         info: (m) => void vscode.window.showInformationMessage(m),
         warn: (m) => void vscode.window.showWarningMessage(m),

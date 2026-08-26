@@ -27,7 +27,8 @@ class FakeTimer implements Timer {
   async fire() { const p = this.pending.shift(); if (p) { p.fn(); await new Promise((r) => setImmediate(r)); } }
 }
 
-const ui: Ui = { setStatus() {}, showEdit() {}, clearEdits() {}, info() {}, warn() {} };
+const previews: string[] = [];
+const ui: Ui = { setStatus() {}, showEdit() {}, showPreview(pv) { previews.push(pv.text); }, clearEdits() {}, info() {}, warn() {} };
 const snap: Snapshot = { prose: "P1\n\nP2\n", code: "x = 1\n\ndef f():\n    pass\n", blocks: [
   { id: "b1", prose: [0, 2], code: [0, 2] }, { id: "b2", prose: [2, 3], code: [2, 4] }] };
 
@@ -49,6 +50,7 @@ function echoClient(log: SyncRequest[] = []): ManagerClient & { log: SyncRequest
     async sync(req, onEvent) {
       log.push(req);
       const le: LineEdit = { side: "prose", start: 2, end: 3, new_text: "P2 updated\n", block: "b2" };
+      await onEvent({ event: "preview", data: { side: "prose", block: "b2", start: 2, text: "P2 upd", done: false } });
       await onEvent({ event: "edit", data: le });
       await onEvent({ event: "done", data: {
         request_id: req.request_id, base_prose_version: req.pair.prose_version, base_code_version: req.pair.code_version,
@@ -75,6 +77,7 @@ test("user edit on code -> debounce -> one sync -> prose updated, no echo", asyn
   // the model's edit fired a change event but must not have scheduled another sync
   assert.equal(timer.pending.filter((p) => p.ms === 700).length, 0);
   assert.equal(manager.snapshot.prose, "P1\n\nP2 updated\n");
+  assert.deepEqual(previews, ["P2 upd"]);
 });
 
 test("typing again during a sync cancels it and reschedules", async () => {

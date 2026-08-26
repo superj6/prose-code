@@ -22,7 +22,9 @@ export interface GenerateResponse { prose: string; blocks: Block[]; latency_ms: 
 export interface Feedback {
   sync_id: string; outcome: "accepted" | "modified" | "reverted"; dwell_s: number; final_text_by_block: Record<string, string>;
 }
+export interface Preview { side: Side; block: string; start: number; text: string; done: boolean }
 export type SyncEvent =
+  | { event: "preview"; data: Preview }
   | { event: "edit"; data: LineEdit }
   | { event: "done"; data: SyncResponse }
   | { event: "error"; data: { message: string; needs_regenerate: boolean } };

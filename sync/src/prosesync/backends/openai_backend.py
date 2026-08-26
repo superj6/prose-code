@@ -13,7 +13,7 @@ from omegaconf import DictConfig
 from openai import AsyncOpenAI
 
 from ..models import BackendResult
-from ..streamjson import ArrayElementScanner
+from ..streamjson import ArrayElementScanner, partial_text
 
 
 class OpenAIBackend:
@@ -25,6 +25,7 @@ class OpenAIBackend:
         self.client = AsyncOpenAI(base_url=base_url, timeout=float(cfg.sync.get("timeout_s", 60)))
         self.model = cfg.sync.model
         self.temperature = cfg.sync.get("temperature")
+        self.reasoning_effort = cfg.sync.get("reasoning_effort")
 
     async def check_model(self) -> dict[str, Any]:
         """Verify the configured model id exists on the endpoint (run at startup, not per request)."""
@@ -38,6 +39,8 @@ class OpenAIBackend:
         schema_name: str,
         on_object: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
         model: str | None = None,
+        on_partial: Callable[[str | None, str], Awaitable[None]] | None = None,
+        cache_key: str | None = None,
     ) -> BackendResult:
         kwargs: dict[str, Any] = {
             "model": model or self.model,
@@ -47,6 +50,13 @@ class OpenAIBackend:
         }
         if self.temperature is not None:
             kwargs["temperature"] = float(self.temperature)
+        if self.reasoning_effort:
+            kwargs["reasoning"] = {"effort": str(self.reasoning_effort)}
+        if cache_key:
+            # Routes consecutive requests for the same pair to the same cache shard (prefix caching).
+            kwargs["prompt_cache_key"] = cache_key
+        if self.cfg.sync.get("service_tier"):
+            kwargs["service_tier"] = str(self.cfg.sync.service_tier)
         scanner = ArrayElementScanner()
         chunks: list[str] = []
         usage: dict[str, Any] = {}
@@ -57,9 +67,14 @@ class OpenAIBackend:
             if etype == "response.output_text.delta":
                 delta = event.delta
                 chunks.append(delta)
-                if on_object is not None:
+                if on_object is not None or on_partial is not None:
                     for obj in scanner.feed(delta):
-                        await on_object(obj)
+                        if on_object is not None:
+                            await on_object(obj)
+                    if on_partial is not None and scanner.collecting:
+                        part = partial_text(scanner.current())
+                        if part is not None:
+                            await on_partial(*part)
             elif etype == "response.refusal.done":
                 raise RuntimeError(f"model refused: {event.refusal}")
             elif etype == "response.completed":

@@ -77,6 +77,16 @@ class Edit(BaseModel):
     reason: str | None = None
 
 
+class Preview(BaseModel):
+    """Partial text of an edit still being generated (display only, never applied)."""
+
+    side: Side
+    block: str
+    start: int
+    text: str
+    done: bool = False
+
+
 class LineEdit(BaseModel):
     """What the editor applies. Coordinates are relative to the target document *as it is after
     the previously streamed line edits of the same response* (so they can be applied in order)."""
@@ -158,6 +168,7 @@ class SyncBackend(Protocol):
 
     ``on_object`` is called with each completed top-level array element as soon as it has been
     streamed (see ``streamjson``), so the engine can validate/apply edits one at a time.
+    ``on_partial(block_id_or_None, text_so_far)`` is called while an element's ``text`` streams.
     """
 
     name: str

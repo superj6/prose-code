@@ -44,10 +44,10 @@ def test_sync_rejects_edits_outside_editable_set(engine):
     gen = asyncio.run(engine.generate(PY_CODE, "python", "x.py"))
 
     class Rogue(MockBackend):
-        async def complete_json(self, messages, schema, schema_name, on_object=None, model=None):
+        async def complete_json(self, messages, schema, schema_name, on_object=None, model=None, **kw):
             await on_object({"op": "replace", "block": "b1", "text": "hacked", "reason": "x"})
             await on_object({"op": "replace", "block": "zz", "text": "hacked", "reason": "x"})
-            return await super().complete_json(messages, schema, schema_name, None, model)
+            return await super().complete_json(messages, schema, schema_name, None, model, **kw)
 
     engine.backend = Rogue()
     prose = gen.prose.replace("Describes: `class Cache:`", "Describes: `class Cache:` and more")

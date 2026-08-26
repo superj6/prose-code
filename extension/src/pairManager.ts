@@ -162,6 +162,10 @@ export class PairManager {
 
     const onEvent = async (e: SyncEvent): Promise<void> => {
       if (gen !== this.generation || controller.signal.aborted) return;
+      if (e.event === "preview") {
+        if (this.docs[target].version === expectedTargetVersion) this.ui.showPreview(e.data);
+        return;
+      }
       if (e.event === "edit") {
         const le = e.data;
         if (this.docs[target].version !== expectedTargetVersion) {

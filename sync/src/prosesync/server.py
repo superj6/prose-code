@@ -2,7 +2,7 @@
 
     GET  /health                       -> {"ok": true, "backend": "openai", "model": "..."}
     POST /generate {code, language, code_path} -> GenerateResponse
-    POST /sync     SyncRequest          -> SSE stream: event "edit" (LineEdit) ... event "done" (SyncResponse)
+    POST /sync     SyncRequest          -> SSE stream: "preview" (Preview)* / "edit" (LineEdit) ... "done" (SyncResponse)
                                            or event "error" {"message", "needs_regenerate"}
     POST /feedback Feedback             -> {"ok": true}
 
@@ -25,7 +25,7 @@ from omegaconf import DictConfig
 from .align import NeedsRegenerate
 from .backends import get_backend
 from .engine import Engine
-from .models import Feedback, GenerateResponse, LineEdit, SyncRequest
+from .models import Feedback, GenerateResponse, LineEdit, Preview, SyncRequest
 
 
 class GenerateBody(SyncRequest.__bases__[0]):  # BaseModel
@@ -61,9 +61,12 @@ def create_app(cfg: DictConfig, backend_name: str | None = None) -> FastAPI:
         async def on_line_edit(le: LineEdit) -> None:
             await queue.put(("edit", le))
 
+        async def on_preview(pv: Preview) -> None:
+            await queue.put(("preview", pv))
+
         async def run() -> None:
             try:
-                resp = await engine.sync(req, on_line_edit=on_line_edit)
+                resp = await engine.sync(req, on_line_edit=on_line_edit, on_preview=on_preview)
                 await queue.put(("done", resp))
             except NeedsRegenerate as e:
                 await queue.put(("error", {"message": str(e), "needs_regenerate": True}))

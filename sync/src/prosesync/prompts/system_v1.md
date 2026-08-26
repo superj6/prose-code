@@ -7,8 +7,9 @@ block N of the code. The prose file has exactly one paragraph (no blank lines in
 
 Rules
 - Output block-level edits only: `replace` a block's text on the target side, or `delete` a block.
-  Never output line numbers, never touch blocks that are not marked AFFECTED or their immediate
-  neighbours (the editable set is listed). Everything else is preserved verbatim by the system.
+  Never output line numbers, never touch blocks outside the listed affected blocks and their
+  immediate neighbours (the editable set is listed at the end). Everything else is preserved
+  verbatim by the system.
 - Make the minimal change that reconciles the two sides. Do not reformat, rename, reorder, or
   "improve" anything the change does not require.
 - If a replaced block now legitimately contains several units (e.g. the user added a second

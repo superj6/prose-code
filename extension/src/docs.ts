@@ -1,4 +1,4 @@
-import { LineEdit, Side } from "./protocol";
+import { LineEdit, Preview, Side } from "./protocol";
 
 /** Minimal document surface the state machine needs; implemented for vscode in applier.ts and by fakes in tests. */
 export interface DocHandle {
@@ -14,6 +14,7 @@ export interface DocHandle {
 export interface Ui {
   setStatus(state: string, detail?: string): void;
   showEdit(side: Side, le: LineEdit): void;
+  showPreview(pv: Preview): void;
   clearEdits(): void;
   info(message: string): void;
   warn(message: string): void;
