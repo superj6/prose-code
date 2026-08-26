@@ -5,6 +5,7 @@ from collections.abc import Sequence
 
 from . import blocks as B
 from .models import Block, Hunk, Side, Snapshot, other_side
+from .names import code_unit_names, names_conflict, prose_heading_names
 
 
 class NeedsRegenerate(ValueError):
@@ -40,10 +41,15 @@ def realign(
 
 
 def resegment(prose: str, code: str, language: str, min_block_lines: int = 3) -> list[Block] | None:
-    """Rebuild a block map from scratch by pairing paragraphs with code units in order."""
+    """Rebuild a block map from scratch by pairing paragraphs with code units in order.
+
+    The counts must agree, and where both a paragraph heading (``## name``) and the code unit carry
+    a name they must match - otherwise the prose is stale and the caller must regenerate."""
     pr = B.segment_prose(prose)
     cr = B.segment_code(code, language, min_block_lines)
-    if len(pr) != len(cr) or not pr:
+    if not pr or not cr or len(pr) != len(cr):
+        return None
+    if names_conflict(prose_heading_names(prose, pr), code_unit_names(code, language, cr)) is not None:
         return None
     return B.make_blocks(pr, cr)
 

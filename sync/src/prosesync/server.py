@@ -4,6 +4,7 @@
     POST /generate {code, language, code_path} -> GenerateResponse
     POST /sync     SyncRequest          -> SSE stream: "preview" (Preview)* / "edit" (LineEdit) ... "done" (SyncResponse)
                                            or event "error" {"message", "needs_regenerate"}
+    POST /align    {prose, code, language} -> {"blocks": [...]} or 409 when the prose is stale (regenerate)
     POST /feedback Feedback             -> {"ok": true}
 
 Cancellation: the extension aborts the HTTP request; the streaming generator is closed and the
@@ -22,7 +23,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from omegaconf import DictConfig
 
-from .align import NeedsRegenerate
+from .align import NeedsRegenerate, resegment
 from .backends import get_backend
 from .engine import Engine
 from .models import Feedback, GenerateResponse, LineEdit, Preview, SyncRequest
@@ -88,6 +89,14 @@ def create_app(cfg: DictConfig, backend_name: str | None = None) -> FastAPI:
                     task.cancel()
 
         return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
+
+    @app.post("/align")
+    async def align(body: AlignBody) -> JSONResponse:
+        """Rebuild the block map for an existing prose/code pair without calling the model."""
+        blocks = resegment(body.prose, body.code, body.language, engine.min_block_lines)
+        if blocks is None:
+            return JSONResponse({"error": "prose and code cannot be paired; regenerate"}, status_code=409)
+        return JSONResponse({"blocks": [b.model_dump() for b in blocks]})
 
     @app.post("/feedback")
     async def feedback(fb: Feedback) -> JSONResponse:

@@ -56,18 +56,26 @@ async def cmd_sync(args) -> int:
     from .engine import NeedsRegenerate, new_request_id, pair_id_for
     from .models import Change, Pair, Snapshot, SyncRequest
 
-    _cfg, engine = _engine(args)
+    cfg, engine = _engine(args)
     code_path = Path(args.file).resolve()
     prose_file = store.prose_path(code_path, args.sidecar_dir)
     if not prose_file.exists():
         print(f"{prose_file} does not exist; run `prosesync gen` first", file=sys.stderr)
         return 2
     code, prose = code_path.read_text(), prose_file.read_text()
+    language = args.lang or store.language_for(code_path)
     base = store.load_snapshot(code_path)
     if base is None:
-        print("no snapshot map; run `prosesync gen` first", file=sys.stderr)
-        return 2
-    language = args.lang or store.language_for(code_path)
+        from .align import resegment
+
+        blocks = resegment(prose, code, language, int(cfg.segment.min_block_lines))
+        if blocks is None:
+            print("no snapshot map and the prose cannot be paired with the code; run `prosesync gen`", file=sys.stderr)
+            return 2
+        base = Snapshot(prose=prose, code=code, blocks=blocks)
+        store.save_snapshot(code_path, base)
+        print(f"rebuilt block map ({len(blocks)} blocks) from headings/order; nothing to sync yet", file=sys.stderr)
+        return 0
     other_dirty = (prose != base.prose) if args.changed == "code" else (code != base.code)
     req = SyncRequest(
         request_id=new_request_id(),

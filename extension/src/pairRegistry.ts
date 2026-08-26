@@ -79,6 +79,18 @@ export class PairRegistry implements vscode.Disposable {
     this.pairs.delete(codePath);
 
     let snapshot = regenerate ? undefined : loadSnapshot(codePath);
+    if (!regenerate && !snapshot && fs.existsSync(prosePath)) {
+      // Prose exists (e.g. checked in) but no map: pair paragraphs with code units, no model call.
+      const prose = fs.readFileSync(prosePath, "utf8");
+      const blocks = await this.client.align(prose, codeDoc.getText(), codeDoc.languageId);
+      if (blocks) {
+        snapshot = { prose, code: codeDoc.getText(), blocks };
+        saveSnapshot(codePath, snapshot);
+        this.out.appendLine(`[align] rebuilt map for ${codePath}: ${blocks.length} blocks`);
+      } else {
+        this.out.appendLine(`[align] ${prosePath} is stale; regenerating`);
+      }
+    }
     if (regenerate || !fs.existsSync(prosePath) || !snapshot) {
       this.status.set("syncing", "generating prose");
       const gen = await vscode.window.withProgress(

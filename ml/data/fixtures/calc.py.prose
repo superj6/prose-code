@@ -1,0 +1,15 @@
+Declare the module description and import `math` and `operator`.
+
+Define `OPS` as the mapping from the four operator symbols to their corresponding arithmetic functions.
+
+## tokenize
+Scan `text` into float operands and operator symbols, allowing digits, decimal points, and whitespace. Raise `ValueError` for any non-whitespace character that is neither part of a number nor a key in `OPS`; append a final buffered number after scanning.
+
+## evaluate
+Return `0.0` for an empty token sequence; otherwise apply each operator and following value from left to right, without precedence, starting with the first token.
+
+## calc
+Tokenize `text` and pass the tokens to `evaluate`, returning the calculated value.
+
+When run as a script, join command-line arguments with spaces, calculate the resulting expression, and print the value.
+

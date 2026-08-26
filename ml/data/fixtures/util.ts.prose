@@ -1,0 +1,13 @@
+Import `readFileSync` from Node's `fs` module for synchronous file reads.
+
+## Config
+Define a configuration shape with numeric `retries` and boolean `verbose` properties.
+
+Define `DEFAULTS` as a `Config` with `retries` set to `3` and `verbose` set to `false`.
+
+## loadConfig
+Read and parse the UTF-8 JSON file at `path`, then return its properties merged over `DEFAULTS`, so supplied values override the defaults.
+
+## retry
+Call `fn` up to `times` attempts and return the first successful result. Store each caught thrown value, and after all attempts rethrow the last one; with no attempts, no value has been stored.
+

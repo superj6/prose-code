@@ -1,0 +1,10 @@
+Declare the executable as package `main`.
+
+Import `fmt` for output, `os` for command-line arguments and exit status, and `strings` for joining and splitting text.
+
+## wordCount
+Return the number of whitespace-separated words in `s`; whitespace-only or empty strings produce zero.
+
+## main
+Require at least one text argument; otherwise print `usage: main <text>` and exit with status 1. Join all remaining arguments with spaces, count their whitespace-separated words using `wordCount`, and print the count.
+

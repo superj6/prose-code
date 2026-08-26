@@ -2,7 +2,7 @@ import { ChildProcess, spawn } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
-import { Feedback, GenerateResponse, SyncEvent, SyncRequest } from "./protocol";
+import { Block, Feedback, GenerateResponse, SyncEvent, SyncRequest } from "./protocol";
 import { Settings } from "./settings";
 
 /** Talks to the prosesync HTTP server; spawns it when endpoint === "auto". */
@@ -80,6 +80,18 @@ export class SyncClient implements vscode.Disposable {
     });
     if (!r.ok) throw new Error(`generate failed: ${r.status} ${await r.text()}`);
     return (await r.json()) as GenerateResponse;
+  }
+
+  /** Rebuild the block map for an existing pair without the model; undefined when the prose is stale. */
+  async align(prose: string, code: string, language: string): Promise<Block[] | undefined> {
+    const r = await fetch(`${await this.url()}/align`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ prose, code, language }),
+    });
+    if (r.status === 409) return undefined;
+    if (!r.ok) throw new Error(`align failed: ${r.status} ${await r.text()}`);
+    return ((await r.json()) as { blocks: Block[] }).blocks;
   }
 
   /** Streams SSE events; resolves when the stream ends. Abort via signal. */

@@ -50,3 +50,13 @@ def test_sync_error_is_reported_as_event(tmp_path):
     with client.stream("POST", "/sync", json=req) as r:
         events = _events(r.read().decode())
     assert events[-1][0] in ("done", "error")
+
+
+def test_align_rebuilds_or_409(tmp_path):
+    cfg = load_config(overrides=[f"log.dir={tmp_path}/logs"])
+    client = TestClient(create_app(cfg, "mock"))
+    gen = client.post("/generate", json={"code": PY_CODE, "language": "python", "code_path": "x.py"}).json()
+    r = client.post("/align", json={"prose": gen["prose"], "code": PY_CODE, "language": "python"})
+    assert r.status_code == 200 and [b["id"] for b in r.json()["blocks"]] == ["b1", "b2", "b3"]
+    r = client.post("/align", json={"prose": "only one paragraph\n", "code": PY_CODE, "language": "python"})
+    assert r.status_code == 409
