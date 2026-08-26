@@ -34,7 +34,7 @@ class MockBackend:
         on_partial: Callable[[str | None, str], Awaitable[None]] | None = None,
         cache_key: str | None = None,
     ) -> BackendResult:
-        user = messages[-1]["content"]
+        user = "\n".join(m["content"] for m in messages if m["role"] == "user")  # repair rounds append a user turn
         self.calls.append({"messages": messages, "schema_name": schema_name})
         if schema_name == "paragraphs":
             code_part = user.split("=== CODE ===", 1)[1]

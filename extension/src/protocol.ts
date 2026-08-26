@@ -13,10 +13,11 @@ export interface SyncRequest {
   other_side_dirty: boolean; options: { verify?: boolean | null; model?: string | null; max_edits?: number | null };
 }
 export interface LineEdit { side: Side; start: number; end: number; new_text: string; block: string; reason?: string | null }
+export interface VerifyResult { ok: boolean; verifier: string; message?: string | null; line?: number | null }
 export interface SyncResponse {
   request_id: string; base_prose_version: number; base_code_version: number; target_side: Side;
   line_edits: LineEdit[]; prose: string; code: string; blocks: Block[]; latency_ms: number; model: string;
-  usage: Record<string, unknown>; warnings: string[];
+  usage: Record<string, unknown>; warnings: string[]; verification?: VerifyResult | null;
 }
 export interface GenerateResponse { prose: string; blocks: Block[]; latency_ms: number; model: string }
 export interface Feedback {

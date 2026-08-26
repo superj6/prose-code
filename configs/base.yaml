@@ -22,10 +22,11 @@ window:                           # long files: render only editable blocks +- r
 segment:
   min_block_lines: 3              # consecutive small top-level nodes (imports, constants) are merged until >= this
 
-verify:
-  enabled: false
-  repair_rounds: 1
-  commands: {}                    # per language, e.g. typescript: ["npx", "tsc", "--noEmit"]
+verify:                           # code-side checks after edits are applied (see sync/src/prosesync/verify/)
+  enabled: false                  # tree-sitter (all languages) + ast.parse (python) + optional command below
+  repair_rounds: 1                # on failure, ask the model once for corrected edits; keep them only if they pass
+  command_timeout_s: 60
+  commands: {}                    # per language; "{file}" is the candidate, e.g. typescript: ["npx", "tsc", "--noEmit", "{file}"]
 
 log:
   enabled: true

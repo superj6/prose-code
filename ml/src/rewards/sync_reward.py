@@ -10,24 +10,13 @@ from collections.abc import Sequence
 
 from prosesync import blocks as B
 from prosesync.models import Block, Side
+from prosesync.verify.treesitter import first_error
 
 
 def syntax_ok(code: str, language: str) -> bool | None:
     """True/False from tree-sitter (ERROR/MISSING nodes); None if no grammar is available."""
-    try:
-        from tree_sitter_language_pack import get_parser
-
-        parser = get_parser(B.normalize_language(language))
-    except Exception:  # noqa: BLE001 - no grammar / import failure both mean "unknown"
-        return None
-    tree = parser.parse(code.encode("utf-8"))
-
-    def has_error(node) -> bool:
-        if node.type == "ERROR" or node.is_missing:
-            return True
-        return any(has_error(c) for c in node.children)
-
-    return not has_error(tree.root_node)
+    res = first_error(language, code)
+    return None if res is None else res[0]
 
 
 def collateral_edit_rate(

@@ -90,6 +90,14 @@ All in `configs/base.yaml` (`sync.*`), overridable with `--override sync.key=val
   block being rewritten, so the first feedback arrives well before the edit lands.
 - `service_tier` (e.g. `priority`) is passed through if set.
 
+## Verification (optional)
+
+`verify.enabled: true` (or the `prosecode.verify` setting) syntax-checks every code-side result with
+tree-sitter (any language) and `ast.parse` (Python), plus any per-language command you configure
+(`verify.commands.typescript: ["npx", "tsc", "--noEmit", "{file}"]`). On failure the model gets one
+repair round with the error; if the repaired edits pass they replace the first attempt, otherwise the
+extension shows a warning with the failing line and the sync is marked unverified.
+
 ## Evaluate a backend
 
 ```sh

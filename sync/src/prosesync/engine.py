@@ -14,6 +14,7 @@ from .align import NeedsRegenerate, affected, realign
 from .apply import ApplyError, DocState
 from .interaction_log import InteractionLog
 from .models import (
+    BackendResult,
     Block,
     Edit,
     GenerateResponse,
@@ -28,6 +29,7 @@ from .models import (
 )
 from .prompts import build_generate_messages, build_sync_messages, window_ids
 from .prompts.schema import EDITS_SCHEMA, PARAGRAPHS_SCHEMA
+from .verify import get_verifiers, run_verifiers
 
 LineEditCallback = Callable[[LineEdit], Awaitable[None]]
 PreviewCallback = Callable[[Preview], Awaitable[None]]
@@ -154,7 +156,35 @@ class Engine:
             cache_key=f"prosesync:{pair.pair_id}",
         )
         result_holder["raw"] = result.raw
+        verification = None
+        verify_on = req.options.verify if req.options.verify is not None else bool(self.cfg.verify.get("enabled", False))
+        if verify_on and target == "code" and applied:
+            verifiers = get_verifiers(self.cfg, pair.language)
+            verification = run_verifiers(verifiers, pair.language, state.text("code"))
+            rounds = int(self.cfg.verify.get("repair_rounds", 1))
+            attempt = 0
+            while not verification.ok and attempt < rounds:
+                attempt += 1
+                repaired, rresult = await self._repair(messages, result.raw, verification, req, blocks, target, editable, max_edits)
+                if repaired is None:
+                    warnings.append(f"repair round {attempt}: no usable edits")
+                    break
+                rverification = run_verifiers(verifiers, pair.language, repaired.text("code"))
+                warnings.append(f"repair round {attempt}: {'ok' if rverification.ok else rverification.message}")
+                result = BackendResult(raw=rresult.raw, model=rresult.model, usage=_merge_usage(result.usage, rresult.usage))
+                if rverification.ok:
+                    # Replace the whole target document with the repaired text (rare path; one edit).
+                    old_lines = len(B.split_lines(state.text("code")))
+                    state = repaired
+                    le = LineEdit(side="code", start=0, end=old_lines, new_text=state.text("code"), block="*",
+                                  reason="verification repair")
+                    line_edits.append(le)
+                    if on_line_edit is not None:
+                        await on_line_edit(le)
+                    verification = rverification
+                    break
         resp = self._response(req, target, state, line_edits, t0, result.model, result.usage, warnings)
+        resp.verification = verification
         self.log.write(
             "sync",
             {
@@ -169,12 +199,60 @@ class Engine:
         )
         return resp
 
+    async def _repair(self, messages, raw, verification, req, blocks, target, editable, max_edits):
+        """Ask the model for a corrected edit set, applied to a fresh copy of the original documents."""
+        pair = req.pair
+        follow_up = messages + [
+            {"role": "assistant", "content": raw},
+            {
+                "role": "user",
+                "content": (
+                    f"Applying your edits produced code that fails verification ({verification.verifier}): "
+                    f"{verification.message}\n"
+                    "Return a corrected, complete set of edits relative to the ORIGINAL documents above "
+                    f"(editable blocks: {', '.join(editable)}). Same JSON format."
+                ),
+            },
+        ]
+        fresh = DocState(pair.prose, pair.code, blocks, pair.language, self.min_block_lines)
+        count = 0
+
+        async def on_object(obj):
+            nonlocal count
+            try:
+                edit = Edit.model_validate(obj)
+            except Exception:  # noqa: BLE001 - invalid element is skipped
+                return
+            if edit.block not in editable or count >= max_edits:
+                return
+            try:
+                if fresh.apply(edit, target) is not None:
+                    count += 1
+            except ApplyError:
+                return
+
+        rresult = await self.backend.complete_json(
+            follow_up, EDITS_SCHEMA, "edits", on_object=on_object, model=req.options.model,
+            cache_key=f"prosesync:{pair.pair_id}",
+        )
+        return (fresh if count else None), rresult
+
     def _response(self, req, target, state, line_edits, t0, model, usage, warnings) -> SyncResponse:
         return SyncResponse(
             request_id=req.request_id, base_prose_version=req.pair.prose_version, base_code_version=req.pair.code_version,
             target_side=target, line_edits=line_edits, prose=state.text("prose"), code=state.text("code"),
             blocks=state.blocks(), latency_ms=int((time.time() - t0) * 1000), model=model, usage=usage, warnings=warnings,
         )
+
+
+def _merge_usage(a: dict, b: dict) -> dict:
+    out = dict(a)
+    for k, v in b.items():
+        if isinstance(v, (int, float)) and isinstance(out.get(k), (int, float)):
+            out[k] = out[k] + v
+        elif k not in out:
+            out[k] = v
+    return out
 
 
 def new_request_id() -> str:

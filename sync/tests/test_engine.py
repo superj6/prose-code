@@ -70,3 +70,31 @@ def test_sync_no_change_is_a_noop(engine):
     )
     resp = asyncio.run(engine.sync(req))
     assert resp.line_edits == [] and resp.warnings == ["no change vs snapshot"]
+
+
+def test_verification_repair_round(tmp_path):
+    cfg = load_config(overrides=[f"log.dir={tmp_path}/logs", "verify.enabled=true", "verify.repair_rounds=1"])
+    calls = []
+
+    class Flaky(MockBackend):
+        async def complete_json(self, messages, schema, schema_name, on_object=None, model=None, **kw):
+            if schema_name != "edits":
+                return await super().complete_json(messages, schema, schema_name, on_object, model, **kw)
+            calls.append(messages)
+            text = "def get(self, k):\n    return self.d.get(k, None\n" if len(calls) == 1 else "def get(self, k):\n    return self.d.get(k, None)\n"
+            await on_object({"op": "replace", "block": "b3", "text": "class Cache:\n    def __init__(self):\n        self.d = {}\n\n    " + text.replace("\n", "\n    ").rstrip() + "\n", "reason": "x"})
+            return await super().complete_json(messages, schema, schema_name, None, model, **kw)
+
+    engine = Engine(cfg, Flaky())
+    gen = asyncio.run(engine.generate(PY_CODE, "python", "x.py"))
+    prose = gen.prose.replace("Describes: `class Cache:`", "Describes: `class Cache:` returning None when missing")
+    req = SyncRequest(
+        request_id="r4", pair=Pair(pair_id="p", language="python", code_path="x.py", prose=prose, code=PY_CODE),
+        base=Snapshot(prose=gen.prose, code=PY_CODE, blocks=gen.blocks), change=Change(side="prose"),
+    )
+    resp = asyncio.run(engine.sync(req))
+    assert len(calls) == 2 and "fails verification" in calls[1][-1]["content"]
+    assert resp.verification is not None and resp.verification.ok
+    assert resp.code.endswith("return self.d.get(k, None)\n")
+    assert resp.line_edits[-1].block == "*" and resp.line_edits[-1].start == 0
+    assert any(w.startswith("repair round 1: ok") for w in resp.warnings)

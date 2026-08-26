@@ -259,6 +259,12 @@ export class PairManager {
     this.discards = 0;
     this.state = "idle";
     for (const w of resp.warnings) this.log(`warning: ${w}`);
+    if (resp.verification && !resp.verification.ok) {
+      const where = resp.verification.line != null ? ` (line ${resp.verification.line + 1})` : "";
+      this.ui.setStatus("error", `verification failed: ${resp.verification.message ?? resp.verification.verifier}${where}`);
+      this.ui.warn(`Prose Code: generated code fails ${resp.verification.verifier}${where}: ${resp.verification.message ?? ""}`);
+      return;
+    }
     this.ui.setStatus("idle", `${applied.length} edit(s) in ${resp.latency_ms} ms`);
     if (applied.length) this.trackFeedback(syncId, target, applied, originals);
   }
