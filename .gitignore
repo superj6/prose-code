@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+outputs/
+wandb/
+.env
+node_modules/
+extension/dist/
+extension/*.vsix
+.prose/
+*.egg-info/

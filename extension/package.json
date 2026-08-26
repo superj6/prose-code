@@ -1,0 +1,143 @@
+{
+  "name": "prose-code",
+  "displayName": "Prose Code",
+  "description": "Edit a program as English prose or as source code; the other side follows.",
+  "version": "0.1.0",
+  "publisher": "prose-code",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:prose",
+    "onCommand:prosecode.openPair"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "prose",
+        "aliases": [
+          "Prose Code"
+        ],
+        "extensions": [
+          ".prose"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "prose",
+        "scopeName": "text.prose",
+        "path": "./syntaxes/prose.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "prosecode.openPair",
+        "title": "Prose Code: Open Pair (prose beside code)"
+      },
+      {
+        "command": "prosecode.syncNow",
+        "title": "Prose Code: Sync Now"
+      },
+      {
+        "command": "prosecode.toggleAutoSync",
+        "title": "Prose Code: Toggle Auto Sync"
+      },
+      {
+        "command": "prosecode.regenerateProse",
+        "title": "Prose Code: Regenerate Prose From Code"
+      },
+      {
+        "command": "prosecode.showLog",
+        "title": "Prose Code: Show Log"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "prosecode.syncNow",
+        "key": "ctrl+alt+s",
+        "mac": "cmd+alt+s",
+        "when": "editorTextFocus"
+      }
+    ],
+    "configuration": {
+      "title": "Prose Code",
+      "properties": {
+        "prosecode.model": {
+          "type": "string",
+          "default": "gpt-5.6-luna",
+          "description": "Model id sent to the sync service (empty = service default)."
+        },
+        "prosecode.endpoint": {
+          "type": "string",
+          "default": "auto",
+          "description": "'auto' spawns a local prosesync server; otherwise a base URL such as http://127.0.0.1:8765."
+        },
+        "prosecode.pythonPath": {
+          "type": "string",
+          "default": "",
+          "description": "Python with prosesync installed (empty = <repo>/.venv/bin/python, then 'python3')."
+        },
+        "prosecode.backend": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "mock"
+          ],
+          "default": "openai",
+          "description": "Backend for the spawned server. 'mock' needs no API key."
+        },
+        "prosecode.debounceMs": {
+          "type": "number",
+          "default": 700
+        },
+        "prosecode.autoSync": {
+          "type": "boolean",
+          "default": true
+        },
+        "prosecode.syncOnSave": {
+          "type": "boolean",
+          "default": true
+        },
+        "prosecode.verify": {
+          "type": "boolean",
+          "default": false,
+          "description": "Ask the service to syntax-check generated code (Phase 2)."
+        },
+        "prosecode.logInteractions": {
+          "type": "boolean",
+          "default": true
+        },
+        "prosecode.sidecarDir": {
+          "type": "string",
+          "default": "",
+          "description": "Directory (relative to the code file) for .prose files; empty = sibling."
+        },
+        "prosecode.feedbackWindowS": {
+          "type": "number",
+          "default": 30,
+          "description": "Seconds after an applied edit during which accept/modify/revert is tracked."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit -p .",
+    "test": "npm run typecheck && node --test dist/test/*.test.js",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.21.0",
+    "typescript": "^5.4.0"
+  }
+}

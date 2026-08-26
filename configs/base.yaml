@@ -1,0 +1,28 @@
+# Single source of truth. Every other config `extends` this one.
+# Runtime (sync service) and training (ml/) both read it.
+seed: 0
+
+sync:
+  model: "gpt-5.6-luna"          # any OpenAI-compatible model id; verified against /v1/models on first use
+  base_url: null                  # null = OPENAI_BASE_URL env or api.openai.com
+  prompt_version: "v1"            # which prompts/system_<v>.md to use; logged with every interaction
+  max_edits: 6                    # server rejects responses with more block edits than this
+  context_blocks: 1               # neighbours on each side of an affected block that the model may also edit
+  timeout_s: 60
+  temperature: null            # null = omit (reasoning models reject it)
+
+segment:
+  min_block_lines: 3              # consecutive small top-level nodes (imports, constants) are merged until >= this
+
+verify:
+  enabled: false
+  repair_rounds: 1
+  commands: {}                    # per language, e.g. typescript: ["npx", "tsc", "--noEmit"]
+
+log:
+  enabled: true
+  dir: "~/.prosecode/logs"
+
+server:
+  host: "127.0.0.1"
+  port: 0                         # 0 = pick a free port and print it (the extension reads it from stdout)

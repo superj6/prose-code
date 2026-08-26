@@ -1,0 +1,9 @@
+{
+  "scopeName": "text.prose",
+  "name": "Prose Code",
+  "patterns": [
+    { "name": "markup.heading.prose", "match": "^##\\s.*$" },
+    { "name": "markup.list.prose", "match": "^\\s*[-*]\\s" },
+    { "name": "string.interpolated.identifier.prose", "match": "`[^`]+`" }
+  ]
+}
