@@ -25,3 +25,17 @@ def test_generate_prompt_lists_blocks():
     blocks = B.make_blocks([(0, 1)] * 3, B.segment_code(PY_CODE, "python"))
     u = build_generate_messages(language="python", code=PY_CODE, blocks=blocks)[1]["content"]
     assert "[b1]" in u and "[b3]" in u and "3 blocks" in u
+
+
+def test_windowed_rendering_collapses_far_blocks():
+    from prosesync.prompts import render_blocks, window_ids
+
+    code = "".join(f"def f{i}():\n    return {i}\n\n\n" for i in range(20))
+    ranges = B.segment_code(code, "python")
+    blocks = B.make_blocks([(i, i + 1) for i in range(len(ranges))], ranges)
+    assert len(blocks) == 20
+    assert window_ids(blocks, ["b10"], max_full_blocks=14, radius=2) == ["b1", "b8", "b9", "b10", "b11", "b12"]
+    assert window_ids(blocks[:5], ["b3"], max_full_blocks=14, radius=2) is None
+    rendered = render_blocks(code, blocks, "code", ["b1", "b8", "b9", "b10", "b11", "b12"])
+    assert "[b10]\ndef f9():" in rendered and "[b5] (collapsed: def f4():)" in rendered
+    assert rendered.count("(collapsed:") == 14

@@ -15,6 +15,10 @@ sync:
   preview_interval_ms: 150
   temperature: null            # null = omit (reasoning models reject it)
 
+window:                           # long files: render only editable blocks +- radius in full
+  max_full_blocks: 14             # pairs with at most this many blocks are always sent in full
+  radius: 2                       # blocks of full context on each side of the editable set
+
 segment:
   min_block_lines: 3              # consecutive small top-level nodes (imports, constants) are merged until >= this
 

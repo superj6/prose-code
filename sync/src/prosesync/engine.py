@@ -26,7 +26,7 @@ from .models import (
     SyncResponse,
     other_side,
 )
-from .prompts import build_generate_messages, build_sync_messages
+from .prompts import build_generate_messages, build_sync_messages, window_ids
 from .prompts.schema import EDITS_SCHEMA, PARAGRAPHS_SCHEMA
 
 LineEditCallback = Callable[[LineEdit], Awaitable[None]]
@@ -143,10 +143,11 @@ class Engine:
             start, _ = state.line_range(target, state.index_of(block))
             await on_preview(Preview(side=target, block=block, start=start, text=text))
 
+        full = window_ids(blocks, editable, int(self.cfg.window.max_full_blocks), int(self.cfg.window.radius))
         messages = build_sync_messages(
             language=pair.language, prose=pair.prose, code=pair.code, blocks=blocks, changed=changed, hunks=hunks,
             affected=core, editable=editable, other_side_dirty=req.other_side_dirty, other_hunks=other_hunks,
-            version=self.prompt_version,
+            version=self.prompt_version, full=full,
         )
         result = await self.backend.complete_json(
             messages, EDITS_SCHEMA, "edits", on_object=on_object, model=req.options.model, on_partial=on_partial,
@@ -161,7 +162,7 @@ class Engine:
                 "prompt_version": self.prompt_version, "model": result.model, "changed_side": changed,
                 "other_side_dirty": req.other_side_dirty, "prose_before": pair.prose, "code_before": pair.code,
                 "blocks_before": blocks, "hunks": hunks, "other_hunks": other_hunks, "affected": core, "editable": editable,
-                "raw": result.raw, "edits_applied": applied, "line_edits": line_edits, "prose_after": resp.prose,
+                "window": full, "raw": result.raw, "edits_applied": applied, "line_edits": line_edits, "prose_after": resp.prose,
                 "code_after": resp.code, "blocks_after": resp.blocks, "warnings": warnings,
                 "latency_ms": resp.latency_ms, "usage": result.usage,
             },

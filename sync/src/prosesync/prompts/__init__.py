@@ -15,15 +15,46 @@ def system_prompt(kind: str, version: str) -> str:
     return (_HERE / f"{kind}_{version}.md").read_text()
 
 
-def render_blocks(text: str, blocks: Sequence[Block], side: Side) -> str:
+OUTLINE_CHARS = 80
+
+
+def outline(text: str) -> str:
+    """One-line summary of a collapsed block: its first non-empty line, truncated."""
+    for ln in split_lines(text):
+        if ln.strip():
+            ln = ln.strip()
+            return ln if len(ln) <= OUTLINE_CHARS else ln[: OUTLINE_CHARS - 1] + "…"
+    return "(empty)"
+
+
+def render_blocks(text: str, blocks: Sequence[Block], side: Side, full: Sequence[str] | None = None) -> str:
     """Render blocks as ``[bN]`` sections. Deliberately free of per-request markers so the rendering
-    is byte-identical across syncs wherever the text is unchanged (prefix caching)."""
+    is byte-identical across syncs wherever the text is unchanged (prefix caching).
+
+    With ``full`` given, only those block ids are rendered in full; the others collapse to
+    ``[bN] (collapsed: <first line>)`` so long files cost tokens proportional to the edit."""
     parts = block_text(text, blocks, side)
     out = []
     for b, t in zip(blocks, parts):
+        if full is not None and b.id not in full:
+            out.append(f"[{b.id}] (collapsed: {outline(t)})")
+            continue
         body = t.rstrip("\n")
         out.append(f"[{b.id}]\n{body}" if body else f"[{b.id}]\n(empty)")
     return "\n\n".join(out)
+
+
+def window_ids(blocks: Sequence[Block], editable: Sequence[str], max_full_blocks: int, radius: int) -> list[str] | None:
+    """Ids to render in full, or None to render everything (small pairs)."""
+    if len(blocks) <= max_full_blocks:
+        return None
+    ids = [b.id for b in blocks]
+    keep: set[int] = set()
+    for i, bid in enumerate(ids):
+        if bid in editable:
+            keep.update(range(max(0, i - radius), min(len(ids), i + radius + 1)))
+    keep.update({0})  # the head of the file (imports/module docs) is cheap and orienting
+    return [ids[i] for i in sorted(keep)]
 
 
 def render_hunks(hunks: Sequence[Hunk]) -> str:
@@ -50,6 +81,7 @@ def build_sync_messages(
     other_side_dirty: bool = False,
     other_hunks: Sequence[Hunk] = (),
     version: str = "v1",
+    full: Sequence[str] | None = None,
 ) -> list[dict[str, str]]:
     """Prompt layout is cache-oriented: everything that is stable across consecutive syncs of the
     same pair (system prompt, then the two documents in a fixed order, without per-request tags)
@@ -60,12 +92,15 @@ def build_sync_messages(
         f"Language: {language}",
         "",
         "=== CODE ===",
-        render_blocks(code, blocks, "code"),
+        render_blocks(code, blocks, "code", full),
         "",
         "=== PROSE ===",
-        render_blocks(prose, blocks, "prose"),
+        render_blocks(prose, blocks, "prose", full),
     ]
-    volatile = [
+    volatile = []
+    if full is not None:
+        volatile.append("Blocks shown as (collapsed: ...) are unchanged context and are not editable.")
+    volatile += [
         "",
         f"=== CHANGE ({changed} side, unified diff vs the last synced state) ===",
         render_hunks(hunks),
