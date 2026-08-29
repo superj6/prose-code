@@ -103,8 +103,10 @@ removes its sidecar and updates the directory prose. Deleting prose never delete
 
 In VS Code: **Prose Code: Open Directory Prose** (generates if missing), upward propagation runs
 after every file sync (`prosecode.propagateUp`), and saving a `DIR.prose` offers to push down
-(`prosecode.pushDownOnSave`: ask | always | never). Propagation stops at the first ancestor whose
-own summary did not change, so a local edit costs one extra model call, not one per level.
+(`prosecode.pushDownOnSave`: ask | always | never). Cost control: with `tree.propagate_on: summary`
+(default) a parent is re-synced only when a child's **summary block** changed (or a child appeared
+or disappeared) — routine paragraph edits stay local and cost nothing upward; `any` re-syncs on
+every child change. Propagation then stops at the first `DIR.prose` that comes back unchanged.
 
 ## Latency knobs
 

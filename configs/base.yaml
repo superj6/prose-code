@@ -20,6 +20,9 @@ window:                           # long files: render only editable blocks +- r
   max_full_blocks: 14             # pairs with at most this many blocks are always sent in full
   radius: 2                       # blocks of full context on each side of the editable set
 
+tree:                             # directory prose (DIR.prose)
+  propagate_on: "summary"         # summary: re-sync parents only when a child's summary block changed (cheap) | any: on any prose change
+
 segment:
   min_block_lines: 3              # consecutive small top-level nodes (imports, constants) are merged until >= this
 

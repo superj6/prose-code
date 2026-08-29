@@ -225,12 +225,37 @@ async def _sync_dir(engine: Engine, d: Path, changed: str, sidecar_dir: str, bro
     return resp
 
 
+def _summary_changed(d: Path, sidecar_dir: str, engine: Engine) -> bool | None:
+    """Did any immediate child's summary block change since the directory's snapshot? None when
+    there is no snapshot to compare with."""
+    base = load_dir_snapshot(d, sidecar_dir, engine.min_block_lines)
+    if base is None:
+        return None
+    old = {name: summary_text(body) for name, body in _doc_sections(base.code).items()}
+    new = {c.name: summary_text(c.prose_path.read_text()) for c in children(d, sidecar_dir)}
+    return old != new
+
+
 async def propagate_up(engine: Engine, code_path: Path, sidecar_dir: str = "", max_levels: int = 5) -> TreeResult:
-    """Re-sync ancestors of ``code_path`` whose DIR.prose exists, stopping when a level is unchanged."""
+    """Re-sync ancestors of ``code_path`` whose DIR.prose exists, stopping when a level is unchanged.
+
+    With ``tree.propagate_on: summary`` (default) a level is re-synced only when one of its
+    children's summary blocks changed (or a child appeared/disappeared); routine paragraph edits in
+    a file stay local. ``any`` re-syncs on every change to a child's prose."""
     result = TreeResult()
     d = code_path.parent
+    on_summary_only = str(engine.cfg.get("tree", {}).get("propagate_on", "summary")) == "summary"
     for _ in range(max_levels):
         if not dir_prose_path(d).exists():
+            break
+        if on_summary_only and _summary_changed(d, sidecar_dir, engine) is False:
+            # keep the snapshot's code side current so the skipped change is not re-detected later
+            base = load_dir_snapshot(d, sidecar_dir, engine.min_block_lines)
+            doc = synthetic_doc(children(d, sidecar_dir), sidecar_dir)
+            if base is not None and base.code != doc:
+                store.save_snapshot(dir_code_path(d), Snapshot(prose=base.prose, code=doc, blocks=base.blocks,
+                                                               code_blocks=B.side_partition(doc, "code", DIR_LANGUAGE, prefix="b")))
+            result.unchanged.append(dir_prose_path(d))
             break
         before = dir_prose_path(d).read_text()
         try:

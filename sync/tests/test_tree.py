@@ -51,8 +51,8 @@ def test_propagate_up_updates_ancestors(engine, project):
     prose_path = store.prose_path(b)
     prose_path.write_text(tree.replace_summary(prose_path.read_text(), "b.ts", "Now a totally different summary."))
     result = asyncio.run(tree.propagate_up(engine, b))
-    # sub/DIR.prose changed, and since the parent sees sub's whole DIR.prose, proj/DIR.prose follows
-    assert [p.relative_to(project).as_posix() for p, _ in result.synced] == ["sub/DIR.prose", "DIR.prose"]
+    # sub/DIR.prose changed (a paragraph, not its summary): with propagate_on=summary the root is left alone
+    assert [p.relative_to(project).as_posix() for p, _ in result.synced] == ["sub/DIR.prose"]
     assert "(updated)" in (project / "sub" / "DIR.prose").read_text()
     assert asyncio.run(tree.propagate_up(engine, b)).synced == []
 
@@ -127,3 +127,21 @@ def test_fresh_clone_propagates_from_committed_base(engine, project):
     result = asyncio.run(tree.propagate_up(engine, a))
     assert [p.name for p, _ in result.synced] == ["DIR.prose"], (result.synced, result.unchanged, result.errors)
     assert "(updated)" in (project / "DIR.prose").read_text()
+
+
+def test_propagate_on_summary_skips_paragraph_only_changes(engine, project):
+    asyncio.run(tree.generate_tree(engine, project))
+    a = project / "a.py"
+    ap = store.prose_path(a)
+    ap.write_text(ap.read_text().replace("Covers b2 here.", "Covers b2 here, in more detail."))  # a paragraph, not the summary
+    result = asyncio.run(tree.propagate_up(engine, a))
+    assert result.synced == [] and result.unchanged == [project / "DIR.prose"]
+    snap = store.load_snapshot(tree.dir_code_path(project))
+    assert "in more detail" in snap.code  # the snapshot absorbed the skipped change
+    # a summary change does propagate
+    ap.write_text(tree.replace_summary(ap.read_text(), "a.py", "A new purpose."))
+    assert [p.name for p, _ in asyncio.run(tree.propagate_up(engine, a)).synced] == ["DIR.prose"]
+    # propagate_on: any re-syncs on paragraph changes too
+    engine.cfg.tree.propagate_on = "any"
+    ap.write_text(ap.read_text().replace("in more detail", "in even more detail"))
+    assert [p.name for p, _ in asyncio.run(tree.propagate_up(engine, a)).synced] == ["DIR.prose"]
