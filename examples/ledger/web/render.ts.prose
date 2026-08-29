@@ -1,0 +1,14 @@
+# render.ts
+Render a report containing monthly totals and top categories in either aligned plain text or compact HTML, using shared month, currency, and padding formatters.
+
+Import `formatCents`, `formatMonth`, and `pad` from `./format` to format monetary values, month keys, and aligned text output.
+
+Define `MonthTotals` with numeric `in`, `out`, and `net` amounts, representing one month's financial totals.
+
+Define `Report` with a `months` record mapping month keys to `MonthTotals` and a `topCategories` list of category names paired with numeric amounts.
+
+## `renderText`
+Render a `Report` as newline-separated text: create a padded header, append one aligned row per month using formatted month and cent values, then add a `top categories` section with each category and amount. Preserve the object-entry and category-array iteration order, and return the joined lines.
+
+## `renderHtml`
+Render a `Report` as an HTML table of monthly totals followed by an unordered list of top categories. Format month keys and amounts, assign `neg` to negative net values and `pos` otherwise, and concatenate all generated rows and list items into one string.

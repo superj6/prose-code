@@ -146,10 +146,31 @@ async def generate_tree(engine: Engine, root: Path, sidecar_dir: str = "", overw
     return result
 
 
+def load_dir_snapshot(d: Path, sidecar_dir: str = "", min_block_lines: int = 3) -> Snapshot | None:
+    """The directory pair's snapshot; rebuilt from the checked-in DIR.prose when the map is absent
+    (maps live in the gitignored .prose/ directory)."""
+    snap = store.load_snapshot(dir_code_path(d))
+    if snap is not None:
+        return snap
+    prose_path = dir_prose_path(d)
+    if not prose_path.exists():
+        return None
+    from .align import resegment
+
+    prose = prose_path.read_text()
+    doc = synthetic_doc(children(d, sidecar_dir))
+    blocks = resegment(prose, doc, DIR_LANGUAGE, min_block_lines)
+    if blocks is None:
+        return None
+    snap = Snapshot(prose=prose, code=doc, blocks=blocks)
+    store.save_snapshot(dir_code_path(d), snap)
+    return snap
+
+
 async def _sync_dir(engine: Engine, d: Path, changed: str, sidecar_dir: str, broad: bool = False, save: bool = True) -> SyncResponse | None:
     """Sync the directory pair; returns None when there is nothing to do or no map exists."""
     prose_path = dir_prose_path(d)
-    base = store.load_snapshot(dir_code_path(d))
+    base = load_dir_snapshot(d, sidecar_dir, engine.min_block_lines)
     if base is None or not prose_path.exists():
         return None
     doc = synthetic_doc(children(d, sidecar_dir))
@@ -203,9 +224,9 @@ async def propagate_up(engine: Engine, code_path: Path, sidecar_dir: str = "", m
 async def propagate_down(engine: Engine, d: Path, sidecar_dir: str = "", depth: int = 3) -> TreeResult:
     """The user edited DIR.prose: update the children whose paragraphs changed."""
     result = TreeResult()
-    base = store.load_snapshot(dir_code_path(d))
+    base = load_dir_snapshot(d, sidecar_dir, engine.min_block_lines)
     if base is None:
-        result.errors.append((dir_prose_path(d), "no map; run gen first"))
+        result.errors.append((dir_prose_path(d), "no DIR.prose (or it cannot be paired with the children); run gen first"))
         return result
     old_doc = base.code
     # The directory snapshot is saved only once every child push succeeded, so a failed push

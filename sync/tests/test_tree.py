@@ -92,3 +92,15 @@ def test_propagate_up_with_dirty_dir_prose_keeps_real_doc_in_snapshot(engine, pr
     assert snap.code == tree.synthetic_doc(tree.children(project))  # real children, not the virtual pass-2 edits
     assert "(unpushed)" in dir_prose.read_text()  # the user's edit survived
     assert asyncio.run(tree.propagate_up(engine, a)).synced == []  # and nothing spurious happens next time
+
+
+def test_dir_snapshot_rebuilt_from_checked_in_prose(engine, project):
+    import shutil
+
+    asyncio.run(tree.generate_tree(engine, project))
+    shutil.rmtree(project / ".prose")  # maps are gitignored: simulate a fresh clone with DIR.prose only
+    shutil.rmtree(project / "sub" / ".prose")
+    snap = tree.load_dir_snapshot(project)
+    assert snap is not None and [b.id for b in snap.blocks] == ["s", "b1", "b2"]
+    assert snap.code == tree.synthetic_doc(tree.children(project))
+    assert store.load_snapshot(tree.dir_code_path(project)) is not None  # persisted for next time

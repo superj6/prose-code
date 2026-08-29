@@ -19,10 +19,10 @@ build-ext:
 serve:            ## local sync server (BACKEND=mock for no API key)
 	$(PY) -m prosesync.cli --backend $(or $(BACKEND),openai) serve
 
-gen:              ## make FILE=examples/calc.py gen
+gen:              ## make FILE=examples/snippets/calc.py gen
 	$(PY) -m prosesync.cli --backend $(or $(BACKEND),openai) gen $(FILE)
 
-sync:             ## make FILE=examples/calc.py SIDE=code sync
+sync:             ## make FILE=examples/snippets/calc.py SIDE=code sync
 	$(PY) -m prosesync.cli --backend $(or $(BACKEND),openai) sync $(FILE) --changed $(or $(SIDE),code)
 
 eval:             ## make eval [BACKEND=mock] [ITEMS=ml/data/eval_v1.jsonl]

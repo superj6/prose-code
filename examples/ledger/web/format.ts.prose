@@ -1,0 +1,13 @@
+# format.ts
+This file provides three formatting helpers for report rendering: currency amounts from integer cents, `YYYY-MM` month keys, and fixed-width text alignment. Each function returns a display-ready string with configurable currency, locale-aware numeric formatting, or padding behavior.
+
+Document that the file contains formatting helpers shared by the report renderer and that monetary amounts are represented as integer cents.
+
+## `formatCents`
+Convert an integer cent amount to a U.S.-formatted currency string, using `$` by default or the supplied currency prefix. Preserve a leading minus sign for negative values, add comma grouping to whole units, and always render exactly two fractional digits.
+
+## `formatMonth`
+Parse a `YYYY-MM` key into numeric year and month components, then return the first day of that month formatted with its abbreviated English month name and numeric year.
+
+## `pad`
+Return `text` unchanged when it already meets or exceeds `width`; otherwise add spaces to reach the requested width. Append spaces for `left` alignment, the default, and prepend them for `right` alignment.

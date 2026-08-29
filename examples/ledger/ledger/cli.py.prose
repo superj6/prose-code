@@ -1,0 +1,17 @@
+# cli.py
+Provide the `ledger` command-line interface for generating monthly income, expense, net totals, and top expense categories from a ledger file, optionally applying categorisation rules; parse arguments, format reports, handle `LedgerError` failures, and expose module execution through `main`.
+
+Document the `python -m ledger.cli report LEDGER_FILE [--rules RULES_FILE] [--top N]` command and import argument parsing, standard error handling, and filesystem path support.
+
+Import ledger parsing, rule loading and categorisation, report aggregation and currency formatting, and the domain-specific `LedgerError` used by the CLI.
+
+## build_parser
+Construct and return an `argparse.ArgumentParser` named `ledger` with a required `report` subcommand that accepts a positional `ledger_file` path, an optional `--rules` path defaulting to `None`, and an integer `--top` count defaulting to `5`.
+
+## run_report
+Read and parse ledger lines, optionally load rules and categorise the transactions, then return a formatted text report containing monthly incoming, outgoing, and net totals followed by the requested top expense categories. Format monetary values with `format_cents`, align the columns, and preserve the aggregation order supplied by the report functions.
+
+## main
+Parse the supplied argument list or the process command line, print the report, and return status `0` on success. Catch `LedgerError`, print its message prefixed with `error:` to standard error, and return status `1`.
+
+When executed as a module or script, call `main()` and terminate the process with its returned status code.

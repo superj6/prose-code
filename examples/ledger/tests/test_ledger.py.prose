@@ -1,0 +1,17 @@
+# test_ledger.py
+This test module verifies a ledger package’s amount and line parsing, rule-based categorisation, category and monthly reporting, formatting, and transaction validation. It supplies representative transaction input and checks both normal results and explicitly raised `LedgerError` cases.
+
+Import `date` for expected transaction dates and `pytest` for test assertions and exception checks.
+
+Import the ledger parsing, categorisation, reporting, formatting, model, and rule-loading APIs exercised by the tests.
+
+Define `LINES` as representative ledger input containing dated income and expenses, a note, an empty line, and a comment line; parsing should retain the four transactions and ignore the latter two lines.
+
+## test_parse_amount_and_lines
+Verify that `parse_amount` converts signed decimal amounts to integer cents, rejects values with more than two decimal places, and that `parse_lines` extracts payees, notes, and dates while ignoring blank and comment lines. Confirm that malformed transaction input raises `LedgerError` identifying line 1.
+
+## test_rules_and_reports
+Load literal and regular-expression category rules, categorise parsed transactions while leaving unmatched income as `uncategorised`, and verify category spending totals, chronological monthly totals, and signed-cent formatting. Check that August aggregates income, outgoings, and net balance correctly and that negative and sub-cent-format values render as expected.
+
+## test_transaction_validation
+Confirm that constructing a `Transaction` with a zero amount or whitespace-only payee raises `LedgerError`.

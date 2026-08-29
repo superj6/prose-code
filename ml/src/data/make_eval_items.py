@@ -20,7 +20,7 @@ FIX = REPO / "ml" / "data" / "fixtures"
 
 
 def fixture(name: str) -> tuple[str, str, str]:
-    code_path = REPO / "examples" / name
+    code_path = REPO / "examples" / "snippets" / name
     if not code_path.exists():
         code_path = FIX / f"{name}.txt"  # fixtures-only sources carry .txt so linters skip them
     lang = {".py": "python", ".ts": "typescript", ".go": "go"}[pathlib_suffix(name)]

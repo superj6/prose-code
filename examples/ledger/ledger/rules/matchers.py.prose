@@ -1,0 +1,15 @@
+# matchers.py
+This module provides matcher factories for transactions: keyword and regular-expression matchers inspect payee or note text, while an amount matcher identifies small expenses. Each factory captures its criteria and returns a callable accepting a `Transaction` and producing a boolean.
+
+Import regular-expression support, callable typing, and postponed annotations for the matcher definitions.
+
+Import `Transaction` and define `Matcher` as a callable that accepts a transaction and returns a boolean.
+
+## keyword
+Capture the supplied words in lowercase and return a matcher that lowercases the transaction’s payee and note, then returns `True` when any word occurs in that combined text; an empty word matches because it is contained in every string.
+
+## regex
+Compile the supplied pattern with case-insensitive matching and return a matcher that reports `True` when the pattern is found anywhere in the transaction’s payee.
+
+## amount_below
+Capture a positive cent threshold and return a matcher that reports `True` only for expense transactions whose absolute cent amount is smaller than that threshold; income transactions always return `False`.

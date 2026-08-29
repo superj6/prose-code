@@ -1,0 +1,13 @@
+# models.py
+Define the ledger’s core types: a validation error, immutable dated transactions with integer-cent amounts, and mutable accounts that maintain sorted transactions and compute balances or date-range selections.
+
+Set up the module’s core imports and document that monetary amounts use integer cents rather than floating-point values.
+
+## `LedgerError`
+Define a `ValueError` subclass for malformed or inconsistent ledger data.
+
+## `Transaction`
+Represent an immutable transaction with a date, nonzero integer-cent amount, nonblank payee, optional category defaulting to `uncategorised`, and optional note. Reject blank or whitespace-only payees and zero amounts; classify negative amounts through `is_expense`, and create a copy with a replacement category through `with_category`.
+
+## `Account`
+Store an account name, opening integer-cent balance, and transactions, defaulting to no transactions. Add transactions while keeping them sorted by date, compute `balance_cents` as the opening amount plus all transaction amounts, and return transactions whose dates satisfy `start <= when < end` through `between`.

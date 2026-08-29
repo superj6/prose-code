@@ -1,0 +1,15 @@
+# engine.py
+This module loads ordered categorisation rules and applies them to transactions, assigning the category from the first matching rule. It supports keyword and regular-expression matchers, ignores blank lines and comments in rule files, and records each rule’s source text.
+
+Declare the module’s purpose—apply ordered rules with first-match precedence—and enable postponed annotations while importing iterable and dataclass utilities.
+
+Import `LedgerError` and `Transaction` model types, plus the `Matcher`, `keyword`, and `regex` matcher interfaces used to construct and apply rules.
+
+## Rule
+Represent an immutable categorisation rule with a category name, a callable `matcher`, and optional original `source` text for diagnostics.
+
+## categorise
+Return new transaction values with categories assigned by scanning each transaction’s rules in order; apply and stop at the first matcher that returns true, otherwise preserve the transaction unchanged.
+
+## load_rules
+Parse rule lines into `Rule` objects, numbering lines from one, removing comments beginning at `#`, and skipping blank results. Require each remaining line to contain a nonempty `category: spec`; interpret a nonempty slash-delimited spec as a regular expression, otherwise split the spec on commas into trimmed keywords, and preserve the cleaned line as the rule source.

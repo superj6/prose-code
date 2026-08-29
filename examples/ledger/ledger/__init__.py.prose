@@ -1,0 +1,6 @@
+# __init__.py
+This package-level module presents a compact personal-finance ledger API by gathering account and transaction models, line parsing, and reporting helpers into a single public interface.
+
+Expose `Account` and `Transaction` models, `parse_lines` for importing transaction data, and `monthly_totals` and `top_categories` for financial reporting.
+
+Declare `Account`, `Transaction`, `parse_lines`, `monthly_totals`, and `top_categories` as the package's public exports.

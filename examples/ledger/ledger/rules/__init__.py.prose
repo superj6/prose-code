@@ -1,0 +1,6 @@
+# __init__.py
+This package entry point exposes the rule, matching, and categorisation APIs by importing their implementations and defining the public export list.
+
+Document the package as providing ordered categorisation rules, then import `Rule`, `categorise`, and `load_rules` from the engine and `Matcher`, `keyword`, and `regex` from the matchers module.
+
+Declare `Matcher`, `Rule`, `categorise`, `keyword`, `load_rules`, and `regex` as the package's public API through `__all__`.

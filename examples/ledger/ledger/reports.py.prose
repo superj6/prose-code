@@ -1,0 +1,15 @@
+# reports.py
+This module aggregates transaction data into serializable dictionaries and ranked expense-category totals, then provides a helper for rendering integer cent amounts as signed decimal strings. Its functions consume `Transaction` iterables and use transaction dates, expense flags, amounts, and categories to produce monthly summaries and spending rankings.
+
+Declare the module purpose and import `defaultdict` and `Iterable` for aggregation and typed transaction collections.
+
+Import the `Transaction` model used by the aggregation functions.
+
+## monthly_totals
+Group transactions by `when` month in `YYYY-MM` format, accumulating positive incoming cents, positive outgoing spending cents from expense amounts, and signed net cents; return a dictionary sorted by month, including zero-filled buckets for each encountered month.
+
+## top_categories
+Sum positive spending cents for expense transactions by category, rank categories by descending total with alphabetical order as the tie-breaker, and return at most `limit` `(category, cents)` pairs; non-expense transactions contribute nothing.
+
+## format_cents
+Convert an integer cent amount to a decimal string with exactly two fractional digits, prefixing negative values with `-` while formatting the absolute magnitude.

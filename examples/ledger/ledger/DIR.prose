@@ -1,0 +1,20 @@
+# ledger/
+This directory contains the core package for a personal-finance ledger, covering its public API, data models, file parsing, reporting, command-line access, and rule-based transaction categorisation. Start with `models.py` and `parsing.py` for the data flow, `reports.py` and `cli.py` for output, and `rules/` for optional categorisation behavior.
+
+## __init__.py
+This package-level module defines the public entry point for the ledger by re-exporting account and transaction models, parsing utilities, and reporting helpers. It provides a compact interface over the implementation modules described by the other children.
+
+## cli.py
+This module implements the `ledger` command-line program, connecting ledger-file parsing and optional rule-based categorisation to monthly financial reports. It handles argument parsing, formatted output, `LedgerError` failures, and module execution through `main`, making it the primary user-facing workflow.
+
+## models.py
+This module defines the ledger’s core data structures, including validation errors, immutable dated `Transaction` values with integer-cent amounts, and mutable accounts that keep transactions sorted. Its balance and date-range operations provide the structured data consumed by parsing, rules, and reporting.
+
+## parsing.py
+This module converts the line-oriented ledger file format into validated `Transaction` objects, including decimal-to-cent amount conversion, optional notes, comments, blank lines, and line-numbered errors. Its individual amount, line, and iterable parsers supply the input pipeline used by the CLI and downstream reporting or categorisation components.
+
+## reports.py
+This module turns `Transaction` iterables into serializable monthly summaries and ranked expense-category totals, using dates, amounts, expense flags, and categories. It also formats integer-cent values as signed decimal strings, providing the aggregation and presentation helpers used by `cli.py`.
+
+## rules/
+This package adds optional transaction categorisation through a public API, ordered rule loading, and reusable keyword, regular-expression, and amount matchers. Its `engine.py` applies rules to transactions while `matchers.py` supplies the matching logic, and `__init__.py` exposes the package interface used by the CLI or other callers.

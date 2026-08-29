@@ -3,7 +3,7 @@
 Edit a program as **English prose** or as **source code** — side by side — and the other side follows.
 
 ```
-examples/calc.py                     examples/calc.py.prose
+examples/snippets/calc.py                     examples/snippets/calc.py.prose
 ───────────────────────────────      ──────────────────────────────────────────────
 def evaluate(tokens):                ## evaluate
     if not tokens:                   Fold `tokens` left to right with no precedence.
@@ -39,11 +39,11 @@ make test                       # python tests + extension typecheck/tests (no A
 ## Try it from the CLI (Phase 0)
 
 ```sh
-.venv/bin/prosesync gen examples/calc.py            # writes calc.py.prose + .prose/calc.py.map.json
-$EDITOR examples/calc.py                            # change something
-.venv/bin/prosesync sync examples/calc.py --changed code    # the affected paragraph(s) update
-$EDITOR examples/calc.py.prose                      # change a paragraph
-.venv/bin/prosesync sync examples/calc.py --changed prose   # the matching code block updates
+.venv/bin/prosesync gen examples/snippets/calc.py            # writes calc.py.prose + .prose/calc.py.map.json
+$EDITOR examples/snippets/calc.py                            # change something
+.venv/bin/prosesync sync examples/snippets/calc.py --changed code    # the affected paragraph(s) update
+$EDITOR examples/snippets/calc.py.prose                      # change a paragraph
+.venv/bin/prosesync sync examples/snippets/calc.py --changed prose   # the matching code block updates
 ```
 
 Add `--backend mock` to any command to exercise the whole pipeline without an API key

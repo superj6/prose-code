@@ -1,0 +1,4 @@
+food:      cafe, market, restaurant
+transport: /metro|bus/
+housing:   lettings, rent
+books:     book

@@ -35,7 +35,7 @@ Observations
 - Prose→code is underdetermined as expected: "case-insensitive" in the Go request was (correctly)
   ignored since counting never depended on case.
 
-## Sample: generated prose for `examples/calc.py` (after edits 2–3)
+## Sample: generated prose for `examples/snippets/calc.py` (after edits 2–3)
 
 ```
 Import `math` and `operator` for use by the calculator.

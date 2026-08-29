@@ -1,0 +1,11 @@
+# ledger/
+This directory contains a personal-finance ledger package, its test suite, and web report-rendering utilities. `ledger/` provides the core data flow and user-facing behavior, `tests/` verifies it, and `web/` formats and renders reports for text or HTML output.
+
+## ledger/
+This directory contains the core package for a personal-finance ledger, covering its public API, data models, file parsing, reporting, command-line access, and rule-based transaction categorisation. Start with `models.py` and `parsing.py` for the data flow, `reports.py` and `cli.py` for output, and `rules/` for optional categorisation behavior; the package is exercised by `tests/` and can supply report data to `web/`.
+
+## tests/
+This directory contains tests for the ledger package, covering its parsing, categorisation, reporting, formatting, and validation behavior. It provides verification for the core functionality in `ledger/` and helps ensure that outputs consumed or complemented by `web/` remain correct.
+
+## web/
+This directory contains the formatting and rendering logic for producing reports. `format.ts` supplies reusable display-formatting helpers, while `render.ts` combines them to generate aligned text or compact HTML reports with monthly totals and top categories, complementing the report-generation and data-processing functionality in `ledger/`.

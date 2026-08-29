@@ -1,0 +1,17 @@
+# parsing.py
+This module parses a line-oriented ledger format into `Transaction` objects, converting decimal amounts to integer cents and handling optional notes, blank lines, comments, and line-numbered parse errors. It exposes helpers for individual amounts, individual lines, and iterables of lines.
+
+Document the ledger format: each transaction contains an ISO date, an amount, and a payee separated by at least two spaces, with an optional trailing `#` note.
+
+Import postponed annotation evaluation, regular-expression support, iterable typing, and `date` parsing.
+
+Import `LedgerError` and `Transaction`, and define `_SPLIT` to separate fields wherever at least two whitespace characters occur.
+
+## parse_amount
+Parse a trimmed signed decimal string containing an integer part and zero to two fractional digits, convert it to integer cents, and return a negative value only for a leading minus sign; raise `LedgerError` when the text does not match the accepted format.
+
+## parse_line
+Remove the first `#` and everything after it as the optional note, ignore lines whose remaining content is blank, and split other lines into date, amount, and payee fields using `_SPLIT`. Require at least three fields, parse the date and amount, join extra payee fields with single spaces, and return a `Transaction` carrying the stripped note.
+
+## parse_lines
+Parse each input line in order, omit blank or comment-only lines, collect the resulting transactions, and wrap `LedgerError` or date `ValueError` failures with the one-based source line number before returning the list.
