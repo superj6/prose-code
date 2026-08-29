@@ -114,6 +114,25 @@ window code the server uses, so training prompts equal serving prompts by constr
 Synthetic records are produced by the production engine itself (propose an edit → `Engine.sync`),
 so labels match the serving distribution; real interactions carry accept/modify/revert outcomes.
 
+## Training a custom model (Phase 4)
+
+```sh
+.venv/bin/python ml/src/data/prepare.py --records ml/data/synth.jsonl --records ml/data/interactions.jsonl --out-dir outputs/data
+.venv/bin/python ml/src/training/sft.py --config configs/local_smoke.yaml        # CPU smoke on the cached Qwen3-0.6B
+.venv/bin/modal volume put prose-code outputs/data /datasets/prosesync/v1         # or run gen_data/prepare on Modal
+.venv/bin/modal run ml/src/modal_app.py --job sft --config configs/modal_sft_smoke.yaml   # 20 steps on an A100
+.venv/bin/modal run ml/src/modal_app.py --job sft --config configs/modal_sft.yaml         # the real run
+.venv/bin/modal run ml/src/modal_app.py --job pairs --adapter /data/outputs/sft/final     # sample K, score with sync_reward -> DPO pairs
+.venv/bin/modal run ml/src/modal_app.py --job dpo --adapter /data/outputs/sft/final       # preference stage (frozen SFT reference)
+.venv/bin/modal run ml/src/modal_app.py --job serve --adapter /data/outputs/sft/final     # vLLM, OpenAI-compatible
+make eval OVERRIDE="sync.base_url=https://<modal-url>/v1 sync.model=prosesync-ft"        # same harness, same items
+```
+
+`configs/train_base.yaml` extends `base.yaml`, so the prompt/segmentation/window settings used to
+render training examples are exactly the serving ones. Base model Qwen2.5-Coder-1.5B-Instruct,
+LoRA r=32/α=64 on all linear projections. The eval harness compares the fine-tune against
+`gpt-5.6-luna` on the same items; the switch criteria are in `docs/roadmap.md`.
+
 ## Evaluate a backend
 
 ```sh

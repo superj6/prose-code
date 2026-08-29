@@ -3,6 +3,8 @@
     modal run ml/src/modal_app.py --job gen_data --limit 50 --per-file 3      # seeds on the volume -> synth records
     modal run ml/src/modal_app.py --job prepare                                 # records -> train/val/test rendered examples
     modal run ml/src/modal_app.py --job sft --config configs/modal_sft_smoke.yaml
+    modal run ml/src/modal_app.py --job pairs --config configs/modal_dpo.yaml --adapter /data/outputs/sft/final
+    modal run ml/src/modal_app.py --job dpo --config configs/modal_dpo.yaml --adapter /data/outputs/sft/final
     modal run ml/src/modal_app.py --job serve --adapter /data/outputs/sft/final # vLLM OpenAI-compatible endpoint
 
 Datasets, outputs and the HF cache live on the ``prose-code`` volume mounted at ``/data``.
@@ -62,6 +64,22 @@ def sft(config_path: str = "configs/modal_sft.yaml", overrides: str = ""):
     _run(argv)
 
 
+@app.function(image=image, gpu=GPU, timeout=6 * 60 * 60, volumes={"/data": volume}, secrets=[env_secret])
+def pairs(adapter: str = "/data/outputs/sft/final", config_path: str = "configs/modal_dpo.yaml", k: int = 4, limit: int = 0,
+          examples: str = "/data/datasets/prosesync/v1/train.jsonl", records: str = "/data/datasets/prosesync/synth.jsonl",
+          out: str = "/data/datasets/prosesync/v1/pairs.jsonl"):
+    _run(["python", "ml/src/training/make_pairs.py", "--config", config_path, "--adapter", adapter, "--examples", examples,
+          "--records", records, "--out", out, "--k", str(k), "--limit", str(limit)])
+
+
+@app.function(image=image, gpu=GPU, timeout=6 * 60 * 60, volumes={"/data": volume}, secrets=[env_secret])
+def dpo(config_path: str = "configs/modal_dpo.yaml", adapter: str = "/data/outputs/sft/final", pairs_path: str = "/data/datasets/prosesync/v1/pairs.jsonl", overrides: str = ""):
+    argv = ["python", "ml/src/training/dpo.py", "--config", config_path, "--adapter", adapter, "--pairs", pairs_path]
+    if overrides:
+        argv += ["--override", *shlex.split(overrides)]
+    _run(argv)
+
+
 @app.function(image=image.pip_install("vllm"), gpu=GPU, timeout=60 * 60, volumes={"/data": volume}, secrets=[env_secret])
 def serve(adapter: str = "/data/outputs/sft/final", base: str = "Qwen/Qwen2.5-Coder-1.5B-Instruct", merged: str = "/data/outputs/merged"):
     """Merge the adapter and start an OpenAI-compatible server (for A/B via sync.base_url)."""
@@ -77,6 +95,10 @@ def main(job: str = "sft", config: str = "configs/modal_sft.yaml", overrides: st
         prepare.remote()
     elif job == "sft":
         sft.remote(config_path=config, overrides=overrides)
+    elif job == "pairs":
+        pairs.remote(adapter=adapter, config_path=config, limit=limit, k=per_file)
+    elif job == "dpo":
+        dpo.remote(config_path=config, adapter=adapter, overrides=overrides)
     elif job == "serve":
         serve.remote(adapter=adapter)
     else:

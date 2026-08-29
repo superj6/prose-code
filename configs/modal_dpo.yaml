@@ -1,0 +1,13 @@
+# Preference stage: starts from the SFT adapter; pairs from ml/src/training/make_pairs.py.
+extends: train_base.yaml
+dpo:
+  out_dir: "/data/outputs/dpo"
+  epochs: 1
+  batch_size: 2
+  lr: 5.0e-6
+  beta: 0.1
+  max_length: 4096
+  grad_clip: 1.0
+  log_interval: 5
+  max_pairs: null
+  max_steps: null
