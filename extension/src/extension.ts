@@ -21,14 +21,13 @@ export function activate(context: vscode.ExtensionContext): void {
     });
 
   context.subscriptions.push(
-    vscode.commands.registerCommand(
-      "prosecode.openPair",
+    vscode.commands.registerCommand("prosecode.openPair", (resource?: vscode.Uri) =>
       withError(async () => {
-        const doc = vscode.window.activeTextEditor?.document;
+        const doc = resource ? await vscode.workspace.openTextDocument(resource) : vscode.window.activeTextEditor?.document;
         if (!doc || doc.isUntitled) throw new Error("open a saved source file first");
         if (doc.languageId === "prose") throw new Error("run this from the code side");
         await registry.openPair(doc);
-      }),
+      })(),
     ),
     vscode.commands.registerCommand(
       "prosecode.regenerateProse",
@@ -64,14 +63,13 @@ export function activate(context: vscode.ExtensionContext): void {
       void vscode.window.showInformationMessage(`Prose Code: ${on ? "enabled" : "disabled"}`);
     }),
     vscode.commands.registerCommand("prosecode.showLog", () => out.show()),
-    vscode.commands.registerCommand(
-      "prosecode.openDirectoryProse",
+    vscode.commands.registerCommand("prosecode.openDirectoryProse", (resource?: vscode.Uri) =>
       withError(async () => {
         const doc = vscode.window.activeTextEditor?.document;
-        const dir = doc && !doc.isUntitled ? path.dirname(doc.uri.fsPath) : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        const dir = resource?.fsPath ?? (doc && !doc.isUntitled ? path.dirname(doc.uri.fsPath) : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath);
         if (!dir) throw new Error("open a file or a workspace folder first");
         await registry.openDirectoryProse(dir);
-      }),
+      })(),
     ),
     vscode.commands.registerCommand(
       "prosecode.pushDown",
@@ -103,17 +101,19 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.workspace.onDidDeleteFiles((e) => getSettings().enabled && registry.onFilesDeleted(e.files.map((f) => f.fsPath))),
     vscode.workspace.onDidRenameFiles((e) => getSettings().enabled && registry.onFilesRenamed(e.files.map((f) => ({ oldPath: f.oldUri.fsPath, newPath: f.newUri.fsPath })))),
-    vscode.commands.registerCommand(
-      "prosecode.initFolder",
+    vscode.commands.registerCommand("prosecode.initFolder", (resource?: vscode.Uri) =>
       withError(async () => {
-        const doc = vscode.window.activeTextEditor?.document;
-        const fallback = doc && !doc.isUntitled ? path.dirname(doc.uri.fsPath) : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        const picked = await vscode.window.showOpenDialog({ canSelectFiles: false, canSelectFolders: true, canSelectMany: false, defaultUri: fallback ? vscode.Uri.file(fallback) : undefined, openLabel: "Initialize prose here" });
-        const dir = picked?.[0]?.fsPath;
+        let dir = resource?.fsPath;
+        if (!dir) {
+          const doc = vscode.window.activeTextEditor?.document;
+          const fallback = doc && !doc.isUntitled ? path.dirname(doc.uri.fsPath) : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+          const picked = await vscode.window.showOpenDialog({ canSelectFiles: false, canSelectFolders: true, canSelectMany: false, defaultUri: fallback ? vscode.Uri.file(fallback) : undefined, openLabel: "Initialize prose here" });
+          dir = picked?.[0]?.fsPath;
+        }
         if (!dir) return;
         const overwrite = (await vscode.window.showQuickPick(["Keep existing prose (only new files)", "Regenerate everything"], { placeHolder: `Initialize prose under ${dir}` })) === "Regenerate everything";
         await registry.initFolder(dir, overwrite);
-      }),
+      })(),
     ),
     vscode.workspace.onDidCloseTextDocument((doc) => registry.onDocumentClosed(doc)),
   );

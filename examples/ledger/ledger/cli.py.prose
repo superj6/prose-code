@@ -1,17 +1,17 @@
 # cli.py
-This command-line module implements the `ledger report` command. It builds an argument parser for a ledger file, an optional categorisation rules file, and a limit on displayed categories; reads and parses the input; optionally applies rules; formats monthly income, expense, and net totals plus the top expense categories; and converts known `LedgerError` failures into a concise stderr message and exit status 1.
+This module provides the command-line entry point for generating ledger reports. It defines the `report` command and its options, reads and parses ledger data, optionally applies categorisation rules, formats monthly income, spending, net totals, and top expense categories, and converts domain errors into a user-facing message with a nonzero exit status.
 
 ## b1, b2
-Import the command-line, filesystem, and ledger-processing dependencies, including `LedgerError`, parsing, reporting, and rule-loading helpers. The module docstring documents the invocation as `python -m ledger.cli report LEDGER_FILE [--rules RULES_FILE] [--top N]`; the imports also allow annotations to refer to types without eagerly evaluating them.
+Set up the `ledger` command-line module, importing argument parsing, process-exit support, filesystem paths, ledger-specific errors, transaction parsing, report calculations and formatting, and optional rule-based categorisation.
 
 ## build_parser
-Create and return an `argparse.ArgumentParser` named `ledger` with a required `report` subcommand. Require `ledger_file` as a `Path`, accept an optional `--rules` path defaulting to `None`, and accept `--top` as an integer defaulting to `5`. Parsing itself is delegated to the returned parser, so invalid command-line input is handled by `argparse`.
+Create and return the command-line parser with program name `ledger` and a required `report` subcommand. Require a positional `ledger_file` converted to a `Path`, accept an optional `--rules` path defaulting to `None`, and accept `--top` as an integer count defaulting to `5`.
 
 ## run_report
-Read all lines from `ledger_file` and convert them into transactions with `parse_lines`. If `rules_file` is supplied, read and load its rules, then categorise the transactions before reporting. Produce a text report with a fixed header, one formatted row per month from `monthly_totals`, and a `top categories` section containing up to the requested number of results from `top_categories`; format all cent values through `format_cents` and align the displayed columns. Return the complete report as one newline-separated string, including the blank line before the category section.
+Read all lines from `ledger_file` and turn them into transactions with `parse_lines`. If `rules_file` is supplied, read and load its rules, then categorise the transactions before reporting. Produce a text report with a fixed header, one row per monthly total showing formatted income, outgoings, and net amounts, followed by a `top categories` section containing up to the requested number of categories. Return the complete report as newline-separated text; file, parsing, rule, and reporting errors are allowed to propagate to the caller as `LedgerError` failures.
 
 ## main
-Parse the supplied `argv`, or the process command line when `argv` is `None`, using `build_parser`. Run the report and print it on success, returning exit code `0`. Catch `LedgerError` from file processing, parsing, categorisation, or reporting, print it as `error: ...` to standard error, and return exit code `1`; other exception types are not intercepted.
+Parse either the supplied `argv` list or the process command line, run the selected report, print its text to standard output, and return `0` on success. Catch `LedgerError`, print an `error: ...` diagnostic to standard error, and return `1` so command-line failures are reflected in the process status.
 
 ## b6
-When the file is executed as a module or script, call `main()` and pass its return code to `sys.exit`, making the command-line success or handled-error status visible to the operating system.
+When the module is executed directly, invoke `main()` and terminate the process with the exit code it returns; importing the module does not run the command.

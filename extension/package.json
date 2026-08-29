@@ -58,6 +58,16 @@
         "title": "Prose Code: Show Log"
       }
     ],
+    "menus": {
+      "explorer/context": [
+        { "command": "prosecode.initFolder", "when": "explorerResourceIsFolder", "group": "prosecode@1" },
+        { "command": "prosecode.openDirectoryProse", "when": "explorerResourceIsFolder", "group": "prosecode@2" },
+        { "command": "prosecode.openPair", "when": "!explorerResourceIsFolder && resourceLangId != prose", "group": "prosecode@3" }
+      ],
+      "commandPalette": [
+        { "command": "prosecode.pushDown", "when": "resourceFilename == DIR.prose" }
+      ]
+    },
     "keybindings": [
       {
         "command": "prosecode.syncNow",
