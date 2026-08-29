@@ -8,6 +8,7 @@ import { SyncClient } from "./syncClient";
 
 export function activate(context: vscode.ExtensionContext): void {
   const out = vscode.window.createOutputChannel("Prose Code");
+  out.appendLine(`Prose Code activated (${new Date().toISOString()})`);
   const status = new StatusBar();
   const decorations = new Decorations();
   const client = new SyncClient(getSettings, out);
@@ -80,10 +81,21 @@ export function activate(context: vscode.ExtensionContext): void {
         await registry.pushDown(path.dirname(doc.uri.fsPath));
       }),
     ),
+    vscode.workspace.onDidOpenTextDocument((doc) => {
+      if (getSettings().enabled) void registry.attachIfPossible(doc);
+    }),
     vscode.workspace.onDidChangeTextDocument((e) => {
       if (e.contentChanges.length === 0 || !getSettings().enabled) return;
       const found = registry.find(e.document);
-      if (found) found.manager.onUserEdit(found.side);
+      if (found) {
+        found.manager.onUserEdit(found.side);
+        return;
+      }
+      // First edit to a document whose pair is not attached yet (e.g. a .prose opened directly): attach, then count this edit.
+      void registry.attachIfPossible(e.document).then((ok) => {
+        const f = ok ? registry.find(e.document) : undefined;
+        if (f) f.manager.onUserEdit(f.side);
+      });
     }),
     vscode.workspace.onDidSaveTextDocument((doc) => {
       if (!getSettings().enabled) return;
@@ -117,6 +129,8 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
     vscode.workspace.onDidCloseTextDocument((doc) => registry.onDocumentClosed(doc)),
   );
+  // Documents already open when the extension activates (e.g. after a reload).
+  for (const doc of vscode.workspace.textDocuments) if (getSettings().enabled) void registry.attachIfPossible(doc);
 }
 
 async function maybePushDown(doc: vscode.TextDocument): Promise<void> {

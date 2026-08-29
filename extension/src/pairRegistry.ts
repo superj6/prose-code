@@ -92,7 +92,41 @@ export class PairRegistry implements vscode.Disposable {
     const proseDoc = await vscode.workspace.openTextDocument(prosePath);
     await vscode.window.showTextDocument(codeDoc, { viewColumn: vscode.ViewColumn.One, preview: false });
     await vscode.window.showTextDocument(proseDoc, { viewColumn: vscode.ViewColumn.Beside, preview: false, preserveFocus: true });
+    this.attach(codeDoc, proseDoc, snapshot);
+  }
 
+  /** Attach a pair silently (no editor rearrangement) when a code file or its prose is opened.
+   *  Returns false when there is no prose yet or the map cannot be rebuilt. */
+  async attachIfPossible(doc: vscode.TextDocument): Promise<boolean> {
+    const s = this.settings();
+    if (doc.uri.scheme !== "file" || doc.isUntitled) return false;
+    const isProse = doc.languageId === "prose";
+    if (isProse && path.basename(doc.uri.fsPath) === "DIR.prose") return false;
+    const codePath = isProse ? codePathFor(doc.uri.fsPath, s.sidecarDir) : doc.uri.fsPath;
+    if (this.pairs.has(codePath) || !isSupportedSource(codePath)) return false;
+    const prosePath = prosePathFor(codePath, s.sidecarDir);
+    if (!fs.existsSync(prosePath) || !fs.existsSync(codePath)) return false;
+    const codeDoc = isProse ? await vscode.workspace.openTextDocument(codePath) : doc;
+    const proseDoc = isProse ? doc : await vscode.workspace.openTextDocument(prosePath);
+    let snapshot = loadSnapshot(codePath);
+    if (!snapshot) {
+      const snap = await this.client.align(proseDoc.getText(), codeDoc.getText(), codeDoc.languageId, codePath, prosePath);
+      if (!snap) {
+        this.out.appendLine(`[attach] ${prosePath} cannot be paired with the code; run Regenerate Prose`);
+        return false;
+      }
+      snapshot = snap;
+      saveSnapshot(codePath, snapshot);
+    }
+    this.attach(codeDoc, proseDoc, snapshot);
+    this.out.appendLine(`[pair] attached ${codePath} <-> ${prosePath}`);
+    return true;
+  }
+
+  private attach(codeDoc: vscode.TextDocument, proseDoc: vscode.TextDocument, snapshot: Snapshot): void {
+    const s = this.settings();
+    const codePath = codeDoc.uri.fsPath;
+    this.pairs.get(codePath)?.manager.dispose();
     const manager = new PairManager(
       new VsDoc("prose", proseDoc),
       new VsDoc("code", codeDoc),
@@ -121,7 +155,7 @@ export class PairRegistry implements vscode.Disposable {
       },
     );
     this.pairs.set(codePath, { manager, code: codeDoc, prose: proseDoc });
-    this.out.appendLine(`[pair] open ${codePath} <-> ${prosePath}`);
+    this.status.set(s.enabled && s.autoSync ? "idle" : "paused", `pair: ${path.basename(codePath)}`);
   }
 
   private readonly propagateTimers = new Map<string, NodeJS.Timeout>();
