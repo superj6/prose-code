@@ -32,8 +32,7 @@ def test_generate_sync_feedback_roundtrip(tmp_path):
         events = _events(r.read().decode())
     kinds = [k for k, _ in events]
     assert kinds[0] == "preview" and kinds[-2:] == ["edit", "done"]
-    assert events[0][1]["block"] == "b1" and events[0][1]["start"] == 3  # after the 3-line summary block
-    assert events[-2][1]["block"] == "b1" and events[-2][1]["side"] == "prose"
+    assert events[-2][1]["block"] == "p1" and events[-2][1]["side"] == "prose"  # the paragraph annotated `## b1`
     assert events[-1][1]["base_code_version"] == 9 and events[-1][1]["code"] == code
     assert client.post("/feedback", json={"sync_id": "r1", "outcome": "accepted", "dwell_s": 30}).json() == {"ok": True}
 
@@ -53,13 +52,17 @@ def test_sync_error_is_reported_as_event(tmp_path):
 
 
 def test_align_rebuilds_or_409(tmp_path):
-    cfg = load_config(overrides=[f"log.dir={tmp_path}/logs"])
+    cfg = load_config(overrides=[f"log.dir={tmp_path}/logs", "sync.file_mode=paired"])
     client = TestClient(create_app(cfg, "mock"))
     gen = client.post("/generate", json={"code": PY_CODE, "language": "python", "code_path": "x.py"}).json()
     r = client.post("/align", json={"prose": gen["prose"], "code": PY_CODE, "language": "python"})
     assert r.status_code == 200 and [b["id"] for b in r.json()["blocks"]] == ["s", "b1", "b2", "b3"]
     r = client.post("/align", json={"prose": "only one paragraph\n", "code": PY_CODE, "language": "python"})
     assert r.status_code == 409
+    # free mode never needs pairing: independent partitions
+    free = TestClient(create_app(load_config(overrides=[f"log.dir={tmp_path}/logs"]), "mock"))
+    r = free.post("/align", json={"prose": "only one paragraph\n", "code": PY_CODE, "language": "python"}).json()
+    assert [b["id"] for b in r["blocks"]] == ["p1"] and [b["id"] for b in r["code_blocks"]] == ["b1", "b2", "b3"]
 
 
 def test_create_from_new_prose_file(tmp_path):
@@ -84,4 +87,5 @@ def test_align_prefers_committed_base(tmp_path):
     edited = PY_CODE + "\n\ndef extra():\n    return 1\n"   # a clone with an uncommitted code edit
     (repo / "x.py").write_text(edited)
     r = client.post("/align", json={"prose": gen["prose"], "code": edited, "language": "python", "code_path": str(repo / "x.py"), "prose_path": str(repo / "x.py.prose")}).json()
-    assert r["source"] == "git" and r["code"] == PY_CODE and [b["id"] for b in r["blocks"]] == ["s", "b1", "b2", "b3"]
+    assert r["source"] == "git" and r["code"] == PY_CODE and [b["id"] for b in r["blocks"]] == ["s", "p1", "p2", "p3"]
+    assert [b["id"] for b in r["code_blocks"]] == ["b1", "b2", "b3"]

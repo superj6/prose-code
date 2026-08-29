@@ -1,13 +1,14 @@
 # models.py
-Define the ledger’s core types: a validation error, immutable dated transactions with integer-cent amounts, and mutable accounts that maintain sorted transactions and compute balances or date-range selections.
+This file defines the core immutable transaction type and mutable account ledger for tracking money in integer cents. It provides validation through `LedgerError`, represents each transaction with a date, signed amount, payee, category, and note, and lets an `Account` maintain chronologically ordered transactions, calculate its current balance, and query transactions within a half-open date range.
 
-Set up the module’s core imports and document that monetary amounts use integer cents rather than floating-point values.
+## b1
+Provide the foundational imports and data-model setup: use postponed annotations, dataclasses, dates, and integer-cent amounts so monetary calculations avoid floating-point drift.
 
-## `LedgerError`
-Define a `ValueError` subclass for malformed or inconsistent ledger data.
+## LedgerError
+Raise `LedgerError` as a `ValueError` whenever ledger data is malformed or inconsistent. Callers can use this specific exception to distinguish domain validation failures from unrelated errors.
 
-## `Transaction`
-Represent an immutable transaction with a date, nonzero integer-cent amount, nonblank payee, optional category defaulting to `uncategorised`, and optional note. Reject blank or whitespace-only payees and zero amounts; classify negative amounts through `is_expense`, and create a copy with a replacement category through `with_category`.
+## Transaction
+Create an immutable transaction with a required `when` date, signed `amount_cents`, and `payee`; use negative amounts for money out and positive amounts for money in. Default `category` to `uncategorised` and `note` to an empty string. Reject blank or whitespace-only payees and reject a zero amount by raising `LedgerError`. Expose `is_expense` as `True` only for negative amounts. Use `with_category` to return a new transaction with the same date, amount, payee, and note but the supplied category, leaving the original unchanged.
 
-## `Account`
-Store an account name, opening integer-cent balance, and transactions, defaulting to no transactions. Add transactions while keeping them sorted by date, compute `balance_cents` as the opening amount plus all transaction amounts, and return transactions whose dates satisfy `start <= when < end` through `between`.
+## Account
+Maintain a named account with optional `opening_cents` (defaulting to zero) and a mutable transaction list (defaulting to a fresh empty list for each account). Add transactions with `add`, then sort the full list by transaction date so the account remains chronological; transactions on the same date retain their existing relative order. Compute `balance_cents` as the opening balance plus every transaction amount. Use `between` to return transactions whose dates satisfy `start <= when < end`, making the end date exclusive; the returned list is a new filtered list, while the account's stored transactions remain unchanged.

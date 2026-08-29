@@ -1,85 +1,74 @@
 # The prose-code contract
 
-Prose code is lightly structured English. It is a **synchronised view** of the source file, not a
-replacement for it: the code is what runs, the prose is what you read and edit when you would rather
-say *what* than *how*. Both are committed. When you edit one side, the other side is updated so that
-they describe the same program.
+Prose code is free-form English about a source file (or a directory) that stays in sync with it.
+It is a **synchronised view**, not a replacement: the code is what runs, the prose is what you read
+and edit when you would rather say *what* than *how*. Both are committed. When you edit one side,
+the other side is updated so that they describe the same program.
 
-## Hard rule: one paragraph per block
+## Shape of a prose file
 
-The source file is partitioned into **blocks** (a function, a class, a run of imports, a group of
-constants, a top-level statement...). The prose file has exactly one paragraph per block, in the same
-order, separated by blank lines. This is what lets edits stay local: the paragraph for `parse_args`
-is paired with the code for `parse_args`, so changing one only ever touches the other.
+```
+# calc.py
+One paragraph: what the file is for, what it provides, how the pieces fit.
 
-A paragraph may span several lines and may contain bullet points, but it must not contain a blank
-line (a blank line starts the next paragraph, i.e. the next block).
+## tokenize
+Scan `text` into float operands and operator symbols ...
 
-## The summary block
+## evaluate, calc
+Fold the tokens left to right without precedence; `calc` is the one-call convenience ...
 
-The prose may begin with a **summary block**: a level-1 heading naming the file (`# calc.py`) and
-one paragraph saying what the whole file is for, what it provides, and how the pieces fit. It has
-no code of its own (block id `s`). Generation always writes one; syncs refresh it only when the
-file's purpose or surface changes. Directory-level prose (`DIR.prose`, see below) is built from
-these summaries.
+## OPS, b1
+The operator table and the imports it needs.
+```
+
+- The first paragraph is the **summary block**: a level-1 heading naming the file, then one
+  paragraph. Generation always writes one; syncs refresh it only when the file's purpose or
+  surface changes. Directory prose is built from it and from everything below it.
+- Every other paragraph starts with an **annotation line**: `## ` followed by the exact names of
+  the code units it describes (functions, classes, methods; a block id such as `b1` for unnamed
+  blocks like imports). A unit may be covered by several paragraphs and a paragraph may cover
+  several units. Otherwise the prose is free: as many paragraphs as the file deserves, organised
+  however reads best, skipping the trivial.
+- Paragraphs are separated by blank lines and contain none. Bullets are fine.
+
+## Why annotations
+
+They are the only structure the sync needs. When code changes, the changed units' names select the
+paragraphs that may be rewritten; when a paragraph changes, its annotation selects the code blocks
+that may be edited - and only those blocks are sent to the model in full, the rest collapsed. An
+unannotated paragraph falls back to "anything may be relevant", which costs more and is less
+precise, so keep annotations exact and update them when units are renamed, added or removed.
 
 ## Directory prose
 
-Every directory can carry a `DIR.prose`: a `# dirname/` summary block followed by **as many
-paragraphs as the directory deserves** - purpose, how the children fit together, entry points,
-what a newcomer should know. It is free-form: it does not have to list every file, but it must be
-grounded in the directory's contents and use children's exact names in backticks.
+Every directory can carry a `DIR.prose`: a `# dirname/` summary block followed by as many
+annotated paragraphs as the directory deserves - purpose, how the children fit together, entry
+points, what a newcomer should know. Here annotations name **children** (`## cli.py, rules/`).
 
-Its "code side" is synthetic: one block per immediate child holding that child's summary and, for
-subdirectories, an outline of everything beneath - the entire essence of the directory. The two
-sides are synced without a one-to-one pairing: when a child's summary changes, only the paragraphs
-whose claims are affected are rewritten (upward propagation); when you edit `DIR.prose`, the
-children whose description changed get new summaries, and those flow into their code (push-down).
-Naming a child that does not exist yet (`## new_module.py`, `## subdir/`) creates it from the
-summary.
+Its "code side" is synthetic: one block per immediate child holding that child's **entire prose**
+(a file's prose file, or a subdirectory's `DIR.prose`, which already encapsulates its own subtree).
+When a child's prose changes, only the paragraphs annotated with that child are rewritten (upward
+propagation); when you edit `DIR.prose`, only the children named by the changed paragraphs get
+their prose rewritten, and those changes flow into their code (push-down). Naming a child that does
+not exist yet (`export.py`, `util/`) creates it.
 
 ## Style
 
-- Start a paragraph with an optional heading naming the symbol: `## parse_args` or `## class Cache`.
-  Headings are for humans; the pairing is positional, not name-based.
-- Write imperative, behavioural English: what the block does, its inputs, outputs, and edge cases.
-  Do not narrate syntax ("declare a variable"); describe behaviour ("remember the last result").
-- Put identifiers in backticks: `retries`, `Cache.get`, `os.path.join`.
-- Use short bullet lists for multi-step logic. Keep one idea per bullet.
-- Mention error handling, defaults, and anything a reader would need to reimplement the block.
-- Leave out what the code makes obvious and what other blocks already say.
+- Imperative, behavioural English: what a unit does, its inputs, outputs, defaults and the edge
+  cases the code actually handles. Describe behaviour, not syntax.
+- Identifiers in backticks: `retries`, `Cache.get`, `os.path.join`.
+- Short bullets for multi-step logic, one idea per bullet.
+- Leave out what the code makes obvious and what another paragraph already says.
 
 ## What the sync model is told
 
-- Emit edits only for blocks that changed (and, when unavoidable, their immediate neighbours).
-- Preserve every other block byte-for-byte.
-- Follow the file's existing style on the code side; follow this document on the prose side.
-- Never add anchor comments, markers, or IDs to the code.
-- When the prose side underdetermines the code (it usually does), keep the existing implementation
-  and change only what the prose change implies.
+- Emit block-level edits only (`replace` / `delete`), restricted to the editable blocks; everything
+  else is preserved verbatim by the system.
+- Change as little as possible: no rewording, reformatting, renaming or "improving" beyond what the
+  change requires. Return no edits when the sides already agree.
+- Code side: follow the file's existing style; never add markers or comments about blocks. When the
+  prose underdetermines the code (it usually does), keep the existing implementation.
+- Prose side: keep annotations exact; add a `## names` line to any paragraph you add.
 
-## Example
-
-```python
-import os
-import sys
-
-DEFAULT_RETRIES = 3
-
-def fetch(url, retries=DEFAULT_RETRIES):
-    for attempt in range(retries):
-        try:
-            return _get(url)
-        except IOError:
-            if attempt == retries - 1:
-                raise
-```
-
-```
-Import `os` and `sys`, and define `DEFAULT_RETRIES = 3`.
-
-## fetch
-Fetch `url` with `_get`, retrying up to `retries` times (default `DEFAULT_RETRIES`).
-- Swallow `IOError` on every attempt except the last, which is re-raised.
-- Return the first successful result.
-```
+`sync.file_mode: paired` restores the earlier strict form (exactly one paragraph per code block,
+no annotations); it is what the eval set and the training records currently use.

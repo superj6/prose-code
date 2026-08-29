@@ -103,30 +103,18 @@ def _prose_text(path: Path, committed: bool) -> str:
     return path.read_text()
 
 
-def outline(d: Path, sidecar_dir: str = "", budget: int = 40, prefix: str = "", committed: bool = False) -> list[str]:
-    """One line per descendant with prose (files: first sentence of the summary; directories: the
-    same, then their own descendants indented), depth-first, capped at ``budget`` lines."""
-    lines: list[str] = []
-    for c in children(d, sidecar_dir):
-        if len(lines) >= budget:
-            lines.append(f"{prefix}- …")
-            break
-        lines.append(f"{prefix}- {c.name}: {first_sentence(summary_text(_prose_text(c.prose_path, committed)))}")
-        if c.kind == "dir":
-            lines.extend(outline(c.code_path.parent, sidecar_dir, budget - len(lines), prefix + "  ", committed))
-    return lines[: budget + 1]
+def child_header(name: str) -> str:
+    return f"## child: {name}"
 
 
-def synthetic_doc(kids: Iterable[Child], sidecar_dir: str = "", descendant_lines: int = 40, committed: bool = False) -> str:
-    """The directory pair's "code side": one paragraph per immediate child - its summary, and for
-    subdirectories an outline of everything beneath (the entire essence of the directory)."""
+def synthetic_doc(kids: Iterable[Child], sidecar_dir: str = "", committed: bool = False) -> str:
+    """The directory pair's "code side": one block per immediate child holding the child's WHOLE
+    prose - a file's prose file, or a subdirectory's DIR.prose (which already encapsulates its own
+    subtree). Blocks start with ``## child: <name>``."""
     parts = []
     for c in kids:
-        body = summary_text(_prose_text(c.prose_path, committed)) or "(no summary yet)"
-        lines = [f"## {c.name}", *body.split("\n")]
-        if c.kind == "dir":
-            lines.extend(outline(c.code_path.parent, sidecar_dir, descendant_lines, committed=committed))
-        parts.append("\n".join(lines) + "\n")
+        body = _prose_text(c.prose_path, committed).strip("\n") or "(no prose yet)"
+        parts.append(f"{child_header(c.name)}\n{body}\n")
     return "\n".join(parts)
 
 
@@ -138,15 +126,11 @@ class TreeResult:
     errors: list[tuple[Path, str]] = field(default_factory=list)
 
 
-def _descendant_lines(engine: Engine) -> int:
-    return int(engine.cfg.get("tree", {}).get("descendant_lines", 40))
-
-
 async def generate_dir(engine: Engine, d: Path, sidecar_dir: str = "") -> Path | None:
     kids = children(d, sidecar_dir)
     if not kids:
         return None
-    doc = synthetic_doc(kids, sidecar_dir, _descendant_lines(engine))
+    doc = synthetic_doc(kids, sidecar_dir)
     resp = await engine.generate_free(doc, DIR_LANGUAGE, str(dir_code_path(d)), title=d.name + "/")
     out = dir_prose_path(d)
     out.write_text(resp.prose)
@@ -170,13 +154,13 @@ async def generate_tree(engine: Engine, root: Path, sidecar_dir: str = "", overw
             if pp.exists() and not overwrite:
                 continue
             try:
-                resp = await engine.generate(path.read_text(), store.language_for(path), str(path))
+                resp = await engine.generate_prose(path.read_text(), store.language_for(path), str(path))
             except Exception as e:  # noqa: BLE001 - keep going
                 result.errors.append((path, f"{type(e).__name__}: {e}"))
                 continue
             pp.parent.mkdir(parents=True, exist_ok=True)
             pp.write_text(resp.prose)
-            store.save_snapshot(path, Snapshot(prose=resp.prose, code=path.read_text(), blocks=resp.blocks))
+            store.save_snapshot(path, Snapshot(prose=resp.prose, code=path.read_text(), blocks=resp.blocks, code_blocks=resp.code_blocks))
             result.generated.append(pp)
     for d in sorted(dirs + [root], key=lambda p: -len(p.parts)):  # deepest first
         try:
@@ -218,7 +202,7 @@ async def _sync_dir(engine: Engine, d: Path, changed: str, sidecar_dir: str, bro
     if not base.code_blocks:  # snapshot from the old paired format: re-partition both sides
         base = Snapshot(prose=base.prose, code=base.code, blocks=B.side_partition(base.prose, "prose", prefix="p"),
                         code_blocks=B.side_partition(base.code, "code", DIR_LANGUAGE, prefix="b"))
-    doc = synthetic_doc(children(d, sidecar_dir), sidecar_dir, _descendant_lines(engine))
+    doc = synthetic_doc(children(d, sidecar_dir), sidecar_dir)
     prose = prose_path.read_text()
     if changed == "code" and doc == base.code:
         return None
@@ -248,7 +232,7 @@ async def propagate_up(engine: Engine, code_path: Path, sidecar_dir: str = "", m
     for _ in range(max_levels):
         if not dir_prose_path(d).exists():
             break
-        before = summary_text(dir_prose_path(d).read_text())
+        before = dir_prose_path(d).read_text()
         try:
             resp = await _sync_dir(engine, d, "code", sidecar_dir)
         except NeedsRegenerate as e:
@@ -260,8 +244,8 @@ async def propagate_up(engine: Engine, code_path: Path, sidecar_dir: str = "", m
         result.synced.append((dir_prose_path(d), len(resp.line_edits)))
         if any("unpushed" in w for w in resp.warnings):
             result.errors.append((dir_prose_path(d), "has unpushed edits; run push-down to apply them to the children"))
-        if summary_text(resp.prose) == before or d.parent == d:
-            break  # this directory's own summary did not change: parents are unaffected
+        if resp.prose == before or d.parent == d:
+            break  # this DIR.prose did not change: parents (which see the whole file) are unaffected
         d = d.parent
     return result
 
@@ -287,7 +271,6 @@ async def propagate_down(engine: Engine, d: Path, sidecar_dir: str = "", depth: 
         if old_parts.get(name) == body:
             continue
         if name not in kids:
-            # A paragraph for a child that does not exist yet: create it from the prose.
             try:
                 created = await _create_child(engine, d, name, body, sidecar_dir)
             except Exception as e:  # noqa: BLE001
@@ -297,56 +280,71 @@ async def propagate_down(engine: Engine, d: Path, sidecar_dir: str = "", depth: 
                 result.generated.append(created)
             continue
         child = kids[name]
+        if child.kind == "dir" and depth <= 0:
+            continue
         try:
-            if child.kind == "dir" and depth <= 0:
-                continue
-            await _push_summary(engine, child, body, sidecar_dir, depth - 1, result)
+            await _push_child(engine, child, body, sidecar_dir, depth - 1, result)
         except Exception as e:  # noqa: BLE001
             result.errors.append((child.code_path, f"{type(e).__name__}: {e}"))
     if not result.errors:
-        doc = synthetic_doc(children(d, sidecar_dir), sidecar_dir, _descendant_lines(engine))
+        doc = synthetic_doc(children(d, sidecar_dir), sidecar_dir)
         store.save_snapshot(dir_code_path(d), Snapshot(prose=resp.prose, code=doc, blocks=resp.blocks,
                                                        code_blocks=B.side_partition(doc, "code", DIR_LANGUAGE, prefix="b")))
     return result
 
 
-async def _create_child(engine: Engine, d: Path, name: str, summary: str, sidecar_dir: str) -> Path | None:
-    """Create a file (prose from the summary, code generated from that prose) or a directory
-    (with a summary-only DIR.prose) that DIR.prose describes but the filesystem lacks."""
+def _with_heading(name: str, body: str) -> str:
+    """Ensure a child's prose starts with its `# name` summary heading."""
+    text = body.strip("\n")
+    if text.startswith("# ") and not text.startswith("## "):
+        return text + "\n"
+    return f"# {name}\n{text}\n"
+
+
+async def _create_child(engine: Engine, d: Path, name: str, body: str, sidecar_dir: str) -> Path | None:
+    """Create a file (code generated from the prose the model wrote for it) or a directory (with
+    that prose as its DIR.prose) that DIR.prose describes but the filesystem lacks."""
     if name.endswith("/"):
         sub = d / name.rstrip("/")
         sub.mkdir(parents=True, exist_ok=True)
         out = dir_prose_path(sub)
         if not out.exists():
-            out.write_text(f"# {name}\n{summary}\n")
+            out.write_text(_with_heading(name, body))
         return out
     code_path = d / name
     if code_path.suffix not in store.LANGUAGE_SUFFIXES or code_path.exists():
         return None
     prose_path = store.prose_path(code_path, sidecar_dir)
-    prose, code, blocks = await engine.create_from_prose(f"# {name}\n{summary}\n", store.language_for(code_path), str(code_path))
+    prose, code, blocks, code_blocks = await engine.create_from_prose(_with_heading(name, body), store.language_for(code_path), str(code_path))
     prose_path.parent.mkdir(parents=True, exist_ok=True)
     prose_path.write_text(prose)
     code_path.write_text(code)
-    store.save_snapshot(code_path, Snapshot(prose=prose, code=code, blocks=blocks))
+    store.save_snapshot(code_path, Snapshot(prose=prose, code=code, blocks=blocks, code_blocks=code_blocks))
     return code_path
 
 
 def _doc_sections(doc: str) -> dict[str, str]:
-    """``## name`` -> summary text (outline lines of descendants excluded)."""
+    """``## child: name`` -> that child's prose text."""
     out: dict[str, str] = {}
-    for para in doc.split("\n\n"):
-        lines = [ln for ln in para.split("\n") if ln.strip()]
-        if lines and lines[0].startswith("## "):
-            body = [ln for ln in lines[1:] if not ln.lstrip().startswith("- ")]
-            out[lines[0][3:].strip()] = "\n".join(body).strip()
+    name, buf = None, []
+    for ln in B.split_lines(doc):
+        m = B.CHILD_HEADER_RE.match(ln)
+        if m:
+            if name is not None:
+                out[name] = "\n".join(buf).strip("\n")
+            name, buf = m.group(1).strip(), []
+        elif name is not None:
+            buf.append(ln)
+    if name is not None:
+        out[name] = "\n".join(buf).strip("\n")
     return out
 
 
-async def _push_summary(engine: Engine, child: Child, new_summary: str, sidecar_dir: str, depth: int, result: TreeResult) -> None:
+async def _push_child(engine: Engine, child: Child, new_prose: str, sidecar_dir: str, depth: int, result: TreeResult) -> None:
+    """The directory view rewrote this child's prose: write it back and sync it into the code."""
     prose_before = child.prose_path.read_text()
-    prose_now = replace_summary(prose_before, child.name, new_summary)
-    if prose_now == prose_before:
+    prose_now = _with_heading(child.name, new_prose)
+    if prose_now.strip() == prose_before.strip():
         return
     if child.kind == "dir":
         child.prose_path.write_text(prose_now)
@@ -358,13 +356,10 @@ async def _push_summary(engine: Engine, child: Child, new_summary: str, sidecar_
     base = store.load_snapshot(child.code_path)
     code = child.code_path.read_text()
     if base is None:
-        from .align import resegment
-
-        blocks = resegment(prose_before, code, store.language_for(child.code_path), engine.min_block_lines)
-        if blocks is None:
+        base = store.rebuild_snapshot(child.code_path, child.prose_path, store.language_for(child.code_path), engine.file_mode, engine.min_block_lines)
+        if base is None:
             result.errors.append((child.code_path, "no map and prose cannot be paired"))
             return
-        base = Snapshot(prose=prose_before, code=code, blocks=blocks)
     req = SyncRequest(
         request_id=new_request_id(),
         pair=Pair(pair_id=pair_id_for(str(child.code_path)), language=store.language_for(child.code_path), code_path=str(child.code_path), prose=prose_now, code=code),
@@ -373,13 +368,14 @@ async def _push_summary(engine: Engine, child: Child, new_summary: str, sidecar_
     resp = await engine.sync(req)
     edits = len(resp.line_edits)
     if resp.line_edits:
-        # The code changed to honour the new summary; now refresh the paragraphs that describe the
-        # changed code blocks (a plain code -> prose sync against the pre-push code).
+        # The code changed to honour the new prose; refresh the paragraphs describing the changed
+        # code blocks (a plain code -> prose sync against the pre-push code).
         try:
             follow = SyncRequest(
                 request_id=new_request_id(),
                 pair=Pair(pair_id=req.pair.pair_id, language=req.pair.language, code_path=req.pair.code_path, prose=resp.prose, code=resp.code),
-                base=Snapshot(prose=resp.prose, code=code, blocks=resp.blocks), change=Change(side="code"),
+                base=Snapshot(prose=resp.prose, code=code, blocks=resp.blocks, code_blocks=base.code_blocks or B.side_partition(code, "code", req.pair.language, prefix="b")),
+                change=Change(side="code"),
             )
             resp2 = await engine.sync(follow)
             resp, edits = resp2, edits + len(resp2.line_edits)
@@ -387,8 +383,8 @@ async def _push_summary(engine: Engine, child: Child, new_summary: str, sidecar_
             result.errors.append((child.code_path, f"paragraph refresh skipped: {e}"))
     child.prose_path.write_text(resp.prose)
     child.code_path.write_text(resp.code)
-    store.save_snapshot(child.code_path, Snapshot(prose=resp.prose, code=resp.code, blocks=resp.blocks))
+    store.save_snapshot(child.code_path, Snapshot(prose=resp.prose, code=resp.code, blocks=resp.blocks, code_blocks=resp.code_blocks))
     result.synced.append((child.code_path, edits))
 
 
-__all__ = ["children", "generate_dir", "generate_tree", "outline", "propagate_down", "propagate_up", "summary_text", "synthetic_doc"]
+__all__ = ["child_header", "children", "generate_dir", "generate_tree", "propagate_down", "propagate_up", "summary_text", "synthetic_doc"]

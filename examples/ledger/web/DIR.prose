@@ -1,6 +1,8 @@
 # web/
-This directory contains the formatting and rendering pieces for producing reports of monthly totals and top categories. `format.ts` supplies reusable display helpers, while `render.ts` assembles those formatted values into either plain-text or compact HTML output.
+This directory contains the TypeScript formatting and rendering layer for financial reports. `format.ts` supplies shared helpers for currency, month labels, and text alignment, while `render.ts` defines the report data shape and turns that data into either aligned plain text or HTML output.
 
-`format.ts` is the shared presentation utility layer. It converts integer-cent amounts into locale-aware currency strings, formats month keys as `YYYY-MM`, and applies configurable fixed-width alignment and padding for readable text output. These helpers keep formatting rules consistent across report views.
+## format.ts
+`format.ts` centralizes presentation details used by the report renderer. `formatCents` treats monetary values as integer cents and produces signed, comma-grouped currency with exactly two decimal places; `formatMonth` turns `YYYY-MM` keys into labels such as `Jan 2024`; and `pad` creates fixed-width, optionally right-aligned text for tabular output.
 
-`render.ts` is the main report-rendering entry point. It takes monthly totals and top-category data, uses the month, currency, and padding helpers from `format.ts`, and produces either aligned plain text or compact HTML. Plain text emphasizes column alignment, while HTML provides a concise markup representation of the same report content.
+## format.ts, render.ts
+`render.ts` is the main report-facing module: it describes monthly totals and ranked category data, then consumes the helpers from `format.ts` to produce the final representations. `renderText` builds aligned headings, monthly rows, and a top-categories section, while `renderHtml` builds a monthly table and category list, marking negative net values with `neg` and all others with `pos`. The HTML renderer inserts category text without escaping, so its callers must provide safe data.

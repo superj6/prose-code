@@ -102,8 +102,8 @@ export class SyncClient implements vscode.Disposable {
     });
     if (r.status === 409) return undefined;
     if (!r.ok) throw new Error(`align failed: ${r.status} ${await r.text()}`);
-    const j = (await r.json()) as { blocks: Block[]; prose: string; code: string; source: string };
-    return { prose: j.prose, code: j.code, blocks: j.blocks };
+    const j = (await r.json()) as { blocks: Block[]; code_blocks?: Block[]; prose: string; code: string; source: string };
+    return { prose: j.prose, code: j.code, blocks: j.blocks, code_blocks: j.code_blocks ?? [] };
   }
 
   /** Streams SSE events; resolves when the stream ends. Abort via signal. */

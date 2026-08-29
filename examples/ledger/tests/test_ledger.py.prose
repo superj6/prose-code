@@ -1,17 +1,17 @@
 # test_ledger.py
-This test module verifies a ledger package’s amount and line parsing, rule-based categorisation, category and monthly reporting, formatting, and transaction validation. It supplies representative transaction input and checks both normal results and explicitly raised `LedgerError` cases.
+This test module specifies the ledger’s expected behaviour from parsing through validation, categorisation, and reporting. It supplies representative transaction text in `LINES`, verifies conversion into validated `Transaction` objects, checks rule loading and category assignment, confirms aggregate and formatted monetary reports, and exercises error handling for malformed amounts, malformed input lines, and invalid transactions.
 
-Import `date` for expected transaction dates and `pytest` for test assertions and exception checks.
+## b1, b2
+Import the date type, pytest’s exception assertions, and the ledger APIs under test: line and amount parsing, transaction validation, rule loading and categorisation, category aggregation, and monthly report formatting.
 
-Import the ledger parsing, categorisation, reporting, formatting, model, and rule-loading APIs exercised by the tests.
-
-Define `LINES` as representative ledger input containing dated income and expenses, a note, an empty line, and a comment line; parsing should retain the four transactions and ignore the latter two lines.
+## b3
+Use `LINES` as a compact fixture containing two August expenses, an August payroll income, a September expense, an inline note, a blank line, and a comment line. The tests therefore establish that meaningful transaction lines are retained while blank and comment-only lines are ignored.
 
 ## test_parse_amount_and_lines
-Verify that `parse_amount` converts signed decimal amounts to integer cents, rejects values with more than two decimal places, and that `parse_lines` extracts payees, notes, and dates while ignoring blank and comment lines. Confirm that malformed transaction input raises `LedgerError` identifying line 1.
+Verify that `parse_amount` converts signed decimal text into integer cents, including `-12.5`, `1500.00`, and `+3`, while rejecting values with more than two decimal places through `LedgerError`. Parse `LINES` and require the four resulting payees in source order, preserving the first transaction’s note and converting its date to `date(2026, 8, 1)`. Also require malformed input to raise `LedgerError` with an error message identifying line 1.
 
 ## test_rules_and_reports
-Load literal and regular-expression category rules, categorise parsed transactions while leaving unmatched income as `uncategorised`, and verify category spending totals, chronological monthly totals, and signed-cent formatting. Check that August aggregates income, outgoings, and net balance correctly and that negative and sub-cent-format values render as expected.
+Load category rules from comma-separated keywords and a regular-expression rule, ignoring the commented rule line, then categorise the parsed transactions as food, uncategorised, transport, and food. Check that `top_categories` ranks outgoing totals by category as transport at 6000 cents before food at 2500 cents, excluding income from those totals. Check that `monthly_totals` preserves the months `2026-08` and `2026-09`, and that August reports 150000 cents in, 7250 cents out, and a 142750-cent net. Finally, require `format_cents` to render both negative and sub-unit values correctly as `-12.50` and `0.05`.
 
 ## test_transaction_validation
-Confirm that constructing a `Transaction` with a zero amount or whitespace-only payee raises `LedgerError`.
+Ensure the `Transaction` model rejects a zero amount and a payee containing only whitespace, raising `LedgerError` in both cases. Valid dates and otherwise plausible values do not override these validation rules.

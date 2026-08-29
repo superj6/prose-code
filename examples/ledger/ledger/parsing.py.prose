@@ -1,17 +1,14 @@
 # parsing.py
-This module parses a line-oriented ledger format into `Transaction` objects, converting decimal amounts to integer cents and handling optional notes, blank lines, comments, and line-numbered parse errors. It exposes helpers for individual amounts, individual lines, and iterables of lines.
+This module parses a simple line-oriented ledger format into `Transaction` objects. It accepts dates, signed currency amounts, payees separated by runs of whitespace, and optional trailing notes; it ignores blank or comment-only lines and reports malformed input as `LedgerError` with line context when parsing multiple lines. The low-level amount parser feeds the single-line parser, while the iterable parser collects valid transactions in order.
 
-Document the ledger format: each transaction contains an ISO date, an amount, and a payee separated by at least two spaces, with an optional trailing `#` note.
-
-Import postponed annotation evaluation, regular-expression support, iterable typing, and `date` parsing.
-
-Import `LedgerError` and `Transaction`, and define `_SPLIT` to separate fields wherever at least two whitespace characters occur.
+## b1, b2, b3
+Define the ledger format and its parsing dependencies. Each transaction line contains an ISO date, an amount, and a payee separated by at least two spaces, with an optional `#` note; regular expressions split fields, and `LedgerError` plus `Transaction` provide the module’s domain-level results.
 
 ## parse_amount
-Parse a trimmed signed decimal string containing an integer part and zero to two fractional digits, convert it to integer cents, and return a negative value only for a leading minus sign; raise `LedgerError` when the text does not match the accepted format.
+Convert a signed decimal currency string into an integer number of cents. Strip surrounding whitespace, require digits with an optional leading `+` or `-`, and allow zero, one, or two fractional digits; pad one fractional digit with a trailing zero. Reject any other form, including missing digits or more than two decimals, with `LedgerError`. A negative sign applies to the complete cent value, while a leading plus sign is accepted and discarded.
 
 ## parse_line
-Remove the first `#` and everything after it as the optional note, ignore lines whose remaining content is blank, and split other lines into date, amount, and payee fields using `_SPLIT`. Require at least three fields, parse the date and amount, join extra payee fields with single spaces, and return a `Transaction` carrying the stripped note.
+Parse one ledger line into a `Transaction`, or return `None` when the line is blank or contains only a comment. Remove everything from the first `#` onward as the note, trim the remaining body, and split fields on runs of at least two whitespace characters. Require at least a date, amount, and payee; parse the date with `date.fromisoformat`, convert the amount through `parse_amount`, and join any additional payee fields with single spaces. Preserve the trimmed comment text as the transaction’s `note`, including an empty note when no comment is present; malformed field counts, dates, or amounts propagate as parsing errors.
 
 ## parse_lines
-Parse each input line in order, omit blank or comment-only lines, collect the resulting transactions, and wrap `LedgerError` or date `ValueError` failures with the one-based source line number before returning the list.
+Parse an iterable of lines in order and return a list containing every nonempty transaction. Number lines starting at one, delegate each line to `parse_line`, and wrap either `LedgerError` or date-related `ValueError` in a new `LedgerError` that identifies the failing line while suppressing the original exception context. Blank and comment-only lines do not contribute entries.

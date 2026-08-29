@@ -1,6 +1,8 @@
 # tests/
-This directory contains the ledger package’s test coverage, focused entirely on verifying core parsing, categorisation, reporting, formatting, and validation behaviour.
+`test_ledger.py` is the executable specification for the ledger’s full behaviour, covering input parsing, transaction validation, rule-based categorisation, aggregation, monetary formatting, and error handling.
 
-`test_ledger.py` exercises amount and transaction-line parsing using representative inputs, ensuring the ledger interprets source data correctly and rejects invalid cases through the expected `LedgerError` exceptions.
+## test_ledger.py
+Start with `test_ledger.py` to understand the ledger contract end to end. Its `LINES` fixture demonstrates that transaction input may include notes, blank lines, and comments, with only meaningful lines retained; parsing must preserve source order, dates, and notes while converting decimal amounts to integer cents. The tests also define validation boundaries—zero amounts and blank payees are invalid—and require malformed amounts or lines to raise `LedgerError` with useful diagnostics.
 
-The tests also cover rule-based categorisation, category and monthly reports, and output formatting. Together, they check both ordinary results and error paths, making this file the main reference for the package’s intended behaviour and a useful place to look when changing ledger rules, reports, or validation.
+## test_ledger.py
+The module then follows parsed transactions through categorisation and reporting. Rules may use comma-separated keywords or regular expressions, while commented rules are ignored; categorisation can leave transactions uncategorised. Reports distinguish income from outgoing totals, rank outgoing category totals, preserve monthly keys, calculate net amounts, and format negative and sub-unit cent values consistently. These tests provide the clearest entry point for discovering the ledger APIs and the expected relationships between parsing, validation, rules, and formatted reports.

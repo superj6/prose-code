@@ -75,11 +75,11 @@ def create_app(cfg: DictConfig, backend_name: str | None = None) -> FastAPI:
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
-        return {"ok": True, "backend": backend.name, "model": str(cfg.sync.model), "prompt_version": engine.prompt_version}
+        return {"ok": True, "backend": backend.name, "model": str(cfg.sync.model), "prompt_version": engine.prompt_version, "file_mode": engine.file_mode}
 
     @app.post("/generate")
     async def generate(body: GenerateBody) -> GenerateResponse:
-        return await engine.generate(body.code, body.language, body.code_path, model=body.model)
+        return await engine.generate_prose(body.code, body.language, body.code_path, model=body.model)
 
     @app.post("/generate_code")
     async def generate_code(body: GenerateCodeBody) -> GenerateCodeResponse:
@@ -88,8 +88,8 @@ def create_app(cfg: DictConfig, backend_name: str | None = None) -> FastAPI:
     @app.post("/create")
     async def create(body: GenerateCodeBody) -> dict[str, Any]:
         """New prose file (possibly summary-only) -> code + normalised prose + block map."""
-        prose, code, blocks = await engine.create_from_prose(body.prose, body.language, body.code_path)
-        return {"prose": prose, "code": code, "blocks": [b.model_dump() for b in blocks]}
+        prose, code, blocks, code_blocks = await engine.create_from_prose(body.prose, body.language, body.code_path)
+        return {"prose": prose, "code": code, "blocks": [b.model_dump() for b in blocks], "code_blocks": [b.model_dump() for b in code_blocks]}
 
     @app.post("/sync")
     async def sync(req: SyncRequest, request: Request) -> StreamingResponse:
@@ -139,13 +139,21 @@ def create_app(cfg: DictConfig, backend_name: str | None = None) -> FastAPI:
             prose, code, source = store.base_texts(Path(body.code_path), Path(body.prose_path))
             if source != "git":
                 prose, code = body.prose, body.code
+        if engine.file_mode == "free":
+            from . import blocks as B
+
+            return JSONResponse({
+                "blocks": [b.model_dump() for b in B.side_partition(prose, "prose", prefix="p")],
+                "code_blocks": [b.model_dump() for b in B.side_partition(code, "code", body.language, prefix="b")],
+                "prose": prose, "code": code, "source": source,
+            })
         blocks = resegment(prose, code, body.language, engine.min_block_lines)
         if blocks is None and source == "git":  # committed pair stale? try the working copy
             prose, code, source = body.prose, body.code, "request"
             blocks = resegment(prose, code, body.language, engine.min_block_lines)
         if blocks is None:
             return JSONResponse({"error": "prose and code cannot be paired; regenerate"}, status_code=409)
-        return JSONResponse({"blocks": [b.model_dump() for b in blocks], "prose": prose, "code": code, "source": source})
+        return JSONResponse({"blocks": [b.model_dump() for b in blocks], "code_blocks": [], "prose": prose, "code": code, "source": source})
 
     def _tree_json(result) -> dict[str, Any]:
         return {

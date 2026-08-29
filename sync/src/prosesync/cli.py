@@ -55,11 +55,11 @@ async def cmd_gen(args) -> int:
         return await _gen_code_from_prose(engine, code_path, args)
     code = code_path.read_text()
     language = args.lang or store.language_for(code_path)
-    resp = await engine.generate(code, language, str(code_path))
+    resp = await engine.generate_prose(code, language, str(code_path))
     out = store.prose_path(code_path, args.sidecar_dir)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(resp.prose)
-    store.save_snapshot(code_path, Snapshot(prose=resp.prose, code=code, blocks=resp.blocks))
+    store.save_snapshot(code_path, Snapshot(prose=resp.prose, code=code, blocks=resp.blocks, code_blocks=resp.code_blocks))
     print(f"wrote {out} ({len(resp.blocks)} blocks, {resp.latency_ms} ms, model={resp.model})", file=sys.stderr)
     if args.print:
         print(resp.prose)
@@ -78,10 +78,10 @@ async def _gen_code_from_prose(engine, prose_path: Path, args) -> int:
         print(f"{code_path} exists; use `prosesync sync {code_path.name} --changed prose` to update it, or --overwrite", file=sys.stderr)
         return 2
     language = args.lang or store.language_for(code_path)
-    prose, code, blocks = await engine.create_from_prose(prose_path.read_text(), language, str(code_path))
+    prose, code, blocks, code_blocks = await engine.create_from_prose(prose_path.read_text(), language, str(code_path))
     code_path.write_text(code)
     prose_path.write_text(prose)
-    store.save_snapshot(code_path, Snapshot(prose=prose, code=code, blocks=blocks))
+    store.save_snapshot(code_path, Snapshot(prose=prose, code=code, blocks=blocks, code_blocks=code_blocks))
     print(f"wrote {code_path} ({len(blocks)} blocks)", file=sys.stderr)
     if args.print:
         print(code)
@@ -115,17 +115,12 @@ async def cmd_sync(args) -> int:
     language = args.lang or store.language_for(code_path)
     base = store.load_snapshot(code_path)
     if base is None:
-        from .align import resegment
-
-        base_prose, base_code, source = store.base_texts(code_path, prose_file)
-        blocks = resegment(base_prose, base_code, language, int(cfg.segment.min_block_lines))
-        if blocks is None:
+        base = store.rebuild_snapshot(code_path, prose_file, language, engine.file_mode, int(cfg.segment.min_block_lines))
+        if base is None:
             print("no snapshot map and the prose cannot be paired with the code; run `prosesync gen`", file=sys.stderr)
             return 2
-        base = Snapshot(prose=base_prose, code=base_code, blocks=blocks)
-        store.save_snapshot(code_path, base)
-        print(f"rebuilt block map ({len(blocks)} blocks) from the {'committed' if source == 'git' else 'current'} files", file=sys.stderr)
-        if base_prose == prose and base_code == code:
+        print(f"rebuilt block map ({len(base.blocks)} prose / {len(base.code_blocks)} code blocks)", file=sys.stderr)
+        if base.prose == prose and base.code == code:
             print("nothing to sync yet", file=sys.stderr)
             return 0
     other_dirty = (prose != base.prose) if args.changed == "code" else (code != base.code)
@@ -150,7 +145,7 @@ async def cmd_sync(args) -> int:
     else:
         prose_file.write_text(resp.prose)
         code_path.write_text(resp.code)
-        store.save_snapshot(code_path, Snapshot(prose=resp.prose, code=resp.code, blocks=resp.blocks))
+        store.save_snapshot(code_path, Snapshot(prose=resp.prose, code=resp.code, blocks=resp.blocks, code_blocks=resp.code_blocks))
     print(f"{len(resp.line_edits)} edit(s) to {resp.target_side} in {resp.latency_ms} ms (model={resp.model})", file=sys.stderr)
     if not args.dry_run and not args.no_propagate:
         await _propagate(engine, code_path, args.sidecar_dir)

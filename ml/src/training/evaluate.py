@@ -58,7 +58,7 @@ async def run_item(engine: Engine, item: dict[str, Any]) -> dict[str, Any]:
     code_now = item.get("code_now", item["code"])
     req = SyncRequest(
         request_id=f"eval-{item['id']}",
-        pair=Pair(pair_id=str(item["id"]), language=item["language"], code_path=str(item["id"]), prose=prose_now, code=code_now),
+        pair=Pair(mode="paired", pair_id=str(item["id"]), language=item["language"], code_path=str(item["id"]), prose=prose_now, code=code_now),
         base=Snapshot(prose=item["prose"], code=item["code"], blocks=blocks),
         change=Change(side=changed),
         other_side_dirty=bool(item.get("other_side_dirty", False)),

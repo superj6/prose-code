@@ -1,15 +1,14 @@
 # reports.py
-This module aggregates transaction data into serializable dictionaries and ranked expense-category totals, then provides a helper for rendering integer cent amounts as signed decimal strings. Its functions consume `Transaction` iterables and use transaction dates, expense flags, amounts, and categories to produce monthly summaries and spending rankings.
+This module provides three transaction-reporting utilities that consume `Transaction` records and return serialization-friendly results: monthly income, spending, and net totals; ranked expense categories; and human-readable currency strings. The aggregation functions treat expense amounts as negative in the source data, convert spending to positive totals where appropriate, preserve net signs, and produce deterministic ordering.
 
-Declare the module purpose and import `defaultdict` and `Iterable` for aggregation and typed transaction collections.
-
-Import the `Transaction` model used by the aggregation functions.
+## b1, b2
+The module establishes the aggregation context and imports the `Transaction` model used by the reporting functions. Its public results are ordinary dictionaries, lists, tuples, and strings rather than custom objects, making them straightforward to serialize. The transaction input is typed as a general iterable, so callers may provide lists, generators, or other one-pass collections.
 
 ## monthly_totals
-Group transactions by `when` month in `YYYY-MM` format, accumulating positive incoming cents, positive outgoing spending cents from expense amounts, and signed net cents; return a dictionary sorted by month, including zero-filled buckets for each encountered month.
+`monthly_totals` groups transactions by the `when` date formatted as `YYYY-MM`, returning a dictionary whose month keys are sorted chronologically. For each month it reports `in`, `out`, and `net` cents: income adds its amount to `in`, expenses add the negated amount to the positive `out` total, and every transaction contributes its signed amount to `net`. Months with no transactions do not appear, and an empty input returns an empty dictionary.
 
 ## top_categories
-Sum positive spending cents for expense transactions by category, rank categories by descending total with alphabetical order as the tie-breaker, and return at most `limit` `(category, cents)` pairs; non-expense transactions contribute nothing.
+`top_categories` totals only expense transactions, converting their signed amounts into positive spending values grouped by `category`. It sorts categories by descending total spend, breaking equal totals alphabetically by category name, and returns at most `limit` `(category, cents)` pairs. The default limit is five; a zero or negative limit yields an empty list through normal slicing, while income-only input also produces an empty result.
 
 ## format_cents
-Convert an integer cent amount to a decimal string with exactly two fractional digits, prefixing negative values with `-` while formatting the absolute magnitude.
+`format_cents` converts an integer number of cents into a decimal currency-like string with exactly two fractional digits. Negative inputs receive a leading minus sign while formatting uses the absolute magnitude, so values such as `-5` become `-0.05`; whole amounts are rendered with `.00`, and no currency symbol or thousands separator is added.

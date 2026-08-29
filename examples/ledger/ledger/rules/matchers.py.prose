@@ -1,15 +1,14 @@
 # matchers.py
-This module provides matcher factories for transactions: keyword and regular-expression matchers inspect payee or note text, while an amount matcher identifies small expenses. Each factory captures its criteria and returns a callable accepting a `Transaction` and producing a boolean.
+This module provides factory functions for building transaction matchers: call each factory with matching criteria, then apply the returned callable to a `Transaction` to get a boolean result. The matchers cover case-insensitive keyword searches across payees and notes, case-insensitive regular-expression searches limited to payees, and expense transactions whose absolute amount is below a specified cent threshold.
 
-Import regular-expression support, callable typing, and postponed annotations for the matcher definitions.
-
-Import `Transaction` and define `Matcher` as a callable that accepts a transaction and returns a boolean.
+## b1, b2
+Set up the matcher module by importing regular-expression support, the callable type, and the `Transaction` model. Define `Matcher` as the shared callable shape: it accepts a `Transaction` and returns a boolean.
 
 ## keyword
-Capture the supplied words in lowercase and return a matcher that lowercases the transaction’s payee and note, then returns `True` when any word occurs in that combined text; an empty word matches because it is contained in every string.
+Build and return a matcher that accepts any number of `words`. Lowercase the supplied words and, for each transaction, search case-insensitively through the combined payee and note text. Return `True` if at least one word occurs as a substring; with no words, the matcher returns `False` for every transaction.
 
 ## regex
-Compile the supplied pattern with case-insensitive matching and return a matcher that reports `True` when the pattern is found anywhere in the transaction’s payee.
+Compile the supplied regular-expression `pattern` once, using case-insensitive matching, and return a matcher that searches only `tx.payee`. The matcher returns `True` when the pattern is found and `False` otherwise; invalid regular-expression syntax fails when the factory compiles the pattern.
 
 ## amount_below
-Capture a positive cent threshold and return a matcher that reports `True` only for expense transactions whose absolute cent amount is smaller than that threshold; income transactions always return `False`.
+Return a matcher for expense size thresholds expressed in positive cents. It accepts only transactions where `tx.is_expense` is true and whose absolute expense amount, calculated as `-tx.amount_cents`, is strictly less than `cents`; transactions at the threshold, non-expenses, and amounts that do not satisfy the comparison return `False`.

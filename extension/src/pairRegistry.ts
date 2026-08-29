@@ -16,7 +16,7 @@ function loadSnapshot(codePath: string): Snapshot | undefined {
   try {
     const data = JSON.parse(fs.readFileSync(mapPathFor(codePath), "utf8"));
     if (data.version !== MAP_VERSION) return undefined;
-    return { prose: data.prose, code: data.code, blocks: data.blocks };
+    return { prose: data.prose, code: data.code, blocks: data.blocks, code_blocks: data.code_blocks ?? [] };
   } catch {
     return undefined;
   }
@@ -83,7 +83,7 @@ export class PairRegistry implements vscode.Disposable {
       );
       fs.mkdirSync(path.dirname(prosePath), { recursive: true });
       fs.writeFileSync(prosePath, gen.prose);
-      snapshot = { prose: gen.prose, code: codeDoc.getText(), blocks: gen.blocks };
+      snapshot = { prose: gen.prose, code: codeDoc.getText(), blocks: gen.blocks, code_blocks: gen.code_blocks ?? [] };
       saveSnapshot(codePath, snapshot);
       this.out.appendLine(`[generate] ${prosePath}: ${gen.blocks.length} blocks in ${gen.latency_ms} ms (${gen.model})`);
       this.propagateUp(codePath, 500); // a new child summary: tell the directory prose
@@ -130,7 +130,7 @@ export class PairRegistry implements vscode.Disposable {
    *  Coalesced per directory: a burst of syncs in one directory yields one propagation. */
   propagateUp(codePath: string, delayMs = 3000): void {
     const s = this.settings();
-    if (!s.propagateUp) return;
+    if (!s.enabled || !s.propagateUp) return;
     const dir = path.dirname(codePath);
     const pending = this.propagateTimers.get(dir);
     if (pending) clearTimeout(pending);
@@ -220,7 +220,7 @@ export class PairRegistry implements vscode.Disposable {
       const gen = await this.client.generate(code, language, fsPath);
       fs.mkdirSync(path.dirname(prosePath), { recursive: true });
       fs.writeFileSync(prosePath, gen.prose);
-      saveSnapshot(fsPath, { prose: gen.prose, code, blocks: gen.blocks });
+      saveSnapshot(fsPath, { prose: gen.prose, code, blocks: gen.blocks, code_blocks: gen.code_blocks ?? [] });
       this.out.appendLine(`[auto] generated ${prosePath} (${reason}, ${gen.blocks.length} blocks, ${gen.latency_ms} ms)`);
       this.status.set("idle", `prose generated for ${path.basename(fsPath)}`);
       this.propagateUp(fsPath, 500);
@@ -254,7 +254,7 @@ export class PairRegistry implements vscode.Disposable {
       const r = await this.client.create(prose, languageForPath(codePath), codePath);
       fs.writeFileSync(codePath, r.code);
       fs.writeFileSync(prosePath, r.prose);
-      saveSnapshot(codePath, { prose: r.prose, code: r.code, blocks: r.blocks });
+      saveSnapshot(codePath, { prose: r.prose, code: r.code, blocks: r.blocks, code_blocks: r.code_blocks ?? [] });
       this.out.appendLine(`[auto] created ${codePath} from ${prosePath} (${r.blocks.length} blocks)`);
       this.status.set("idle", `created ${path.basename(codePath)}`);
       this.propagateUp(codePath, 500);

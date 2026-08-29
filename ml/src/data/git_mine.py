@@ -95,7 +95,7 @@ async def label(edits: list[dict[str, Any]], backend: str | None, config: str | 
             continue
         try:
             gen = await engine.generate(e["code"], e["language"], e["path"])
-            req = SyncRequest(request_id=f"git-{e['id']}", pair=Pair(pair_id=f"git-{e['id']}", language=e["language"], code_path=e["path"], prose=gen.prose, code=e["code_now"]),
+            req = SyncRequest(request_id=f"git-{e['id']}", pair=Pair(mode="paired", pair_id=f"git-{e['id']}", language=e["language"], code_path=e["path"], prose=gen.prose, code=e["code_now"]),
                               base=Snapshot(prose=gen.prose, code=e["code"], blocks=gen.blocks), change=Change(side="code"))
             resp = await engine.sync(req)
         except (NeedsRegenerate, Exception) as err:  # noqa: BLE001 - keep going on a bad item

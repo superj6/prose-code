@@ -33,9 +33,12 @@ def test_generate_tree_writes_file_and_dir_prose(engine, project):
     assert names == ["DIR.prose", "a.py.prose", "sub/DIR.prose", "sub/b.ts.prose"] and not result.errors
     assert tree.summary_text((project / "a.py.prose").read_text()) == "Mock summary of the file."
     doc = tree.synthetic_doc(tree.children(project))
-    assert doc.startswith("## a.py\nMock summary of the file.\n\n## sub/\nMock summary of the directory.\n- b.ts: Mock summary of the file.\n")
+    a_prose = (project / "a.py.prose").read_text().strip("\n")
+    sub_prose = (project / "sub" / "DIR.prose").read_text().strip("\n")
+    assert doc == f"## child: a.py\n{a_prose}\n\n## child: sub/\n{sub_prose}\n"
+    assert a_prose.startswith("# a.py\nMock summary of the file.\n\n## b1\nCovers b1 here.")  # annotated free-form file prose
     root_prose = (project / "DIR.prose").read_text()
-    assert root_prose.startswith("# proj/\nMock summary of the directory.\n\nCovers ## a.py in this directory.\n\nCovers ## sub/")
+    assert root_prose.startswith("# proj/\nMock summary of the directory.\n\n## a.py\nCovers a.py here.\n\n## sub/\nCovers sub/ here.")
     snap = store.load_snapshot(tree.dir_code_path(project))
     assert [b.id for b in snap.blocks] == ["s", "p1", "p2"] and [b.id for b in snap.code_blocks] == ["b1", "b2"]
     again = asyncio.run(tree.generate_tree(engine, project))
@@ -48,7 +51,8 @@ def test_propagate_up_updates_ancestors(engine, project):
     prose_path = store.prose_path(b)
     prose_path.write_text(tree.replace_summary(prose_path.read_text(), "b.ts", "Now a totally different summary."))
     result = asyncio.run(tree.propagate_up(engine, b))
-    assert [p.relative_to(project).as_posix() for p, _ in result.synced] == ["sub/DIR.prose"]
+    # sub/DIR.prose changed, and since the parent sees sub's whole DIR.prose, proj/DIR.prose follows
+    assert [p.relative_to(project).as_posix() for p, _ in result.synced] == ["sub/DIR.prose", "DIR.prose"]
     assert "(updated)" in (project / "sub" / "DIR.prose").read_text()
     assert asyncio.run(tree.propagate_up(engine, b)).synced == []
 
@@ -56,20 +60,19 @@ def test_propagate_up_updates_ancestors(engine, project):
 def test_propagate_down_pushes_summary_into_child(engine, project):
     asyncio.run(tree.generate_tree(engine, project))
     dir_prose = project / "DIR.prose"
-    dir_prose.write_text(dir_prose.read_text().replace("Covers ## a.py in this directory.", "Covers ## a.py in this directory (user wants more)."))
+    dir_prose.write_text(dir_prose.read_text().replace("Covers a.py here.", "Covers a.py here (user wants more)."))
     result = asyncio.run(tree.propagate_down(engine, project))
     synced = [p.relative_to(project).as_posix() for p, _ in result.synced]
     assert synced[0] == "DIR.prose" and "a.py" in synced and not result.errors
     child_prose = (project / "a.py.prose").read_text()
-    assert child_prose.startswith("# a.py\n") and "(updated)" in tree.summary_text(child_prose)
-    assert "# " in (project / "a.py").read_text()
-    assert "(updated)" in child_prose.split("\n\n")[1]
+    assert child_prose.startswith("# a.py\n") and "(updated)" in child_prose  # the directory view rewrote a.py's prose...
+    assert "# " in (project / "a.py").read_text()  # ...and the code followed
 
 
 def test_push_down_creates_children_named_in_dir_prose(engine, project):
     asyncio.run(tree.generate_tree(engine, project))
     dir_prose = project / "DIR.prose"
-    dir_prose.write_text(dir_prose.read_text().rstrip("\n") + "\n\n## c.py\nA new module that greets people.\n\n## util/\nHelpers shared by the package.\n")
+    dir_prose.write_text(dir_prose.read_text().rstrip("\n") + "\n\n## child: c.py\nA new module that greets people.\n\n## child: util/\nHelpers shared by the package.\n")
     result = asyncio.run(tree.propagate_down(engine, project))
     assert not result.errors, result.errors
     created = sorted(p.relative_to(project).as_posix() for p in result.generated)
@@ -83,7 +86,7 @@ def test_push_down_creates_children_named_in_dir_prose(engine, project):
 def test_propagate_up_with_dirty_dir_prose_keeps_real_doc_in_snapshot(engine, project):
     asyncio.run(tree.generate_tree(engine, project))
     dir_prose = project / "DIR.prose"
-    dir_prose.write_text(dir_prose.read_text().replace("Covers ## sub/", "Covers ## sub/ (unpushed)"))
+    dir_prose.write_text(dir_prose.read_text().replace("Covers sub/ here.", "Covers sub/ here (unpushed)."))
     a = project / "a.py"
     ap = store.prose_path(a)
     ap.write_text(tree.replace_summary(ap.read_text(), "a.py", "Changed summary."))
@@ -109,7 +112,6 @@ def test_replace_summary_roundtrip():
     assert tree.replace_summary(prose, "f.py", "New one.") == "# f.py\nNew one.\n\n## g\nBody.\n"
     assert tree.replace_summary("## g\nBody.\n", "f.py", "Added.") == "# f.py\nAdded.\n\n## g\nBody.\n"
     assert tree.summary_text("no summary\n") is None
-    assert tree.first_sentence("One thing. Another thing.") == "One thing."
 
 
 def test_fresh_clone_propagates_from_committed_base(engine, project):

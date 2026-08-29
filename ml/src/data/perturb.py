@@ -103,7 +103,7 @@ async def make_records(engine: Engine, item: dict[str, Any], per_file: int, rng:
                 continue  # the proposed code edit itself is broken
         req = SyncRequest(
             request_id=f"synth-{item['id']}-{bid}-{side}",
-            pair=Pair(pair_id=f"synth-{item['id']}", language=language, code_path=item["file"], prose=edited_prose, code=edited_code),
+            pair=Pair(mode="paired", pair_id=f"synth-{item['id']}", language=language, code_path=item["file"], prose=edited_prose, code=edited_code),
             base=Snapshot(prose=prose, code=code, blocks=blocks), change=Change(side=side),
         )
         try:

@@ -12,6 +12,14 @@ from prosesync.models import Change, Pair, Snapshot, SyncRequest
 
 @pytest.fixture
 def engine(tmp_path):
+    """Paired-mode engine (one paragraph per code block)."""
+    cfg = load_config(overrides=[f"log.dir={tmp_path}/logs", "sync.file_mode=paired"])
+    return Engine(cfg, MockBackend())
+
+
+@pytest.fixture
+def free_engine(tmp_path):
+    """Free-mode engine (annotated free-form prose), the default."""
     cfg = load_config(overrides=[f"log.dir={tmp_path}/logs"])
     return Engine(cfg, MockBackend())
 
@@ -76,7 +84,7 @@ def test_sync_no_change_is_a_noop(engine):
 
 
 def test_verification_repair_round(tmp_path):
-    cfg = load_config(overrides=[f"log.dir={tmp_path}/logs", "verify.enabled=true", "verify.repair_rounds=1"])
+    cfg = load_config(overrides=[f"log.dir={tmp_path}/logs", "verify.enabled=true", "verify.repair_rounds=1", "sync.file_mode=paired"])
     calls = []
 
     class Flaky(MockBackend):
@@ -137,8 +145,67 @@ def test_generate_code_from_prose(engine):
 
 
 def test_create_from_summary_only_prose(engine):
-    prose, code, blocks = asyncio.run(engine.create_from_prose("# c.py\nGreets people.\n", "python", "c.py"))
+    prose, code, blocks, _code_blocks = asyncio.run(engine.create_from_prose("# c.py\nGreets people.\n", "python", "c.py"))
     assert code.startswith("# ") and code.strip()
     assert prose.startswith("# c.py\nGreets people.\n\n") and blocks[0].id == "s" and len(blocks) >= 2
     assert B.check_partition(blocks, "prose", len(B.split_lines(prose))) is None
     assert B.check_partition(blocks, "code", len(B.split_lines(code))) is None
+
+
+FREE_PROSE = (
+    "# x.py\nA fetcher and a cache.\n\n"
+    "## fetch\nFetch `url`, retrying up to `retries` times.\n\n"
+    "## Cache, Cache.get\nA tiny dict-backed cache; `get` returns `None` when missing.\n\n"
+    "## b1\nImports and the default retry count.\n"
+)
+
+
+def _free_req(engine, prose_now, code_now, changed, rid="f1"):
+    base = Snapshot(prose=FREE_PROSE, code=PY_CODE, blocks=B.side_partition(FREE_PROSE, "prose", prefix="p"),
+                    code_blocks=B.side_partition(PY_CODE, "code", "python", prefix="b"))
+    return SyncRequest(request_id=rid, pair=Pair(pair_id="p", language="python", code_path="x.py", prose=prose_now, code=code_now),
+                       base=base, change=Change(side=changed))
+
+
+def test_free_generate_writes_annotated_paragraphs(free_engine):
+    resp = asyncio.run(free_engine.generate_prose(PY_CODE, "python", "x.py"))
+    assert resp.prose.startswith("# x.py\nMock summary of the file.\n\n## b1\nCovers b1 here.\n\n## b2\n")
+    assert [b.id for b in resp.blocks] == ["s", "p1", "p2", "p3"] and [b.id for b in resp.code_blocks] == ["b1", "b2", "b3"]
+
+
+def test_free_code_change_only_touches_annotated_paragraphs(free_engine):
+    code = PY_CODE.replace("return self.d.get(k)", "return self.d.get(k, None)")  # inside b3 (class Cache)
+    resp = asyncio.run(free_engine.sync(_free_req(free_engine, FREE_PROSE, code, "code")))
+    prompt = free_engine.backend.calls[-1]["messages"][-1]["content"]
+    assert "Affected blocks: b3. Editable blocks: s, p2." in prompt  # only the Cache paragraph (+ summary)
+    assert [le.block for le in resp.line_edits] == ["p2"]
+    assert "(updated)" in resp.prose.split("\n\n")[2] and "(updated)" not in resp.prose.split("\n\n")[1]
+    assert resp.code == code and [b.id for b in resp.code_blocks] == ["b1", "b2", "b3"]
+
+
+def test_free_prose_change_only_edits_referenced_code(free_engine):
+    prose = FREE_PROSE.replace("retrying up to `retries` times", "retrying up to `retries` times and logging each failure")
+    resp = asyncio.run(free_engine.sync(_free_req(free_engine, prose, PY_CODE, "prose")))
+    prompt = free_engine.backend.calls[-1]["messages"][-1]["content"]
+    assert "Affected blocks: p1. Editable blocks: b1, b2, b3." in prompt  # fetch (b2) +- 1 context block
+    assert [le.block for le in resp.line_edits] == ["b1"] and resp.prose == prose
+
+
+def test_free_unannotated_paragraph_falls_back_to_all_blocks(free_engine):
+    base_prose = FREE_PROSE + "\nGeneral notes about the module.\n"  # an unannotated paragraph in the snapshot
+    prose = base_prose.replace("General notes about the module.", "General notes: everything should log failures.")
+    req = _free_req(free_engine, prose, PY_CODE, "prose")
+    req.base.prose = base_prose
+    req.base.blocks = B.side_partition(base_prose, "prose", prefix="p")
+    resp = asyncio.run(free_engine.sync(req))
+    prompt = free_engine.backend.calls[-1]["messages"][-1]["content"]
+    assert "Editable blocks: b1, b2, b3." in prompt and "no `## names` annotation" in prompt
+    assert resp.line_edits
+
+
+def test_free_create_from_prose_auto_annotates(free_engine):
+    prose = "# n.py\nSummary.\n\nThe `greet` function returns a greeting.\n"
+    out_prose, code, blocks, code_blocks = asyncio.run(free_engine.create_from_prose(prose, "python", "n.py"))
+    assert code.strip() and code_blocks
+    assert out_prose.startswith("# n.py\nSummary.\n\n")
+    assert blocks[0].id == "s"

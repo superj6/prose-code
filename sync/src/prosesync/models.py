@@ -49,7 +49,7 @@ class Pair(BaseModel):
     code: str
     prose_version: int = 0
     code_version: int = 0
-    mode: PairMode = "paired"
+    mode: PairMode | None = None  # None = the configured sync.file_mode
 
 
 class Hunk(BaseModel):
@@ -153,8 +153,9 @@ class GenerateResponse(BaseModel):
 
 class GenerateCodeResponse(BaseModel):
     code: str
-    prose: str  # the prose, normalised (one paragraph per block)
+    prose: str  # the prose, normalised
     blocks: list[Block]
+    code_blocks: list[Block] = Field(default_factory=list)  # free mode: the code side's own partition
     latency_ms: int = 0
     model: str = ""
     usage: dict[str, Any] = Field(default_factory=dict)

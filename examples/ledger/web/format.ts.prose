@@ -1,13 +1,14 @@
 # format.ts
-This file provides three formatting helpers for report rendering: currency amounts from integer cents, `YYYY-MM` month keys, and fixed-width text alignment. Each function returns a display-ready string with configurable currency, locale-aware numeric formatting, or padding behavior.
+This file provides three formatting helpers for a report renderer: it turns integer-cent amounts into signed, comma-grouped currency strings, converts `YYYY-MM` keys into abbreviated month-and-year labels, and pads text to a requested width with configurable alignment.
 
-Document that the file contains formatting helpers shared by the report renderer and that monetary amounts are represented as integer cents.
+## b1
+Document the shared purpose of these helpers: report formatting operates on amounts represented as integer cents, while the other utilities format dates and align textual output.
 
-## `formatCents`
-Convert an integer cent amount to a U.S.-formatted currency string, using `$` by default or the supplied currency prefix. Preserve a leading minus sign for negative values, add comma grouping to whole units, and always render exactly two fractional digits.
+## formatCents
+Format an integer-cent `cents` value as a currency string, using `$` by default or the supplied `currency` prefix. Preserve a leading minus sign for negative values, group whole units with `en-US` thousands separators, and always render exactly two digits after the decimal point; for example, `123456` becomes `$1,234.56` and `-5` becomes `-$0.05`.
 
-## `formatMonth`
-Parse a `YYYY-MM` key into numeric year and month components, then return the first day of that month formatted with its abbreviated English month name and numeric year.
+## formatMonth
+Convert a `YYYY-MM` `key` into an `en-US` abbreviated month-and-year label by parsing the year and month and constructing the first day of that month. The returned form is such as `Jan 2024`; the function relies on the input containing a numeric year and month separated by a hyphen.
 
-## `pad`
-Return `text` unchanged when it already meets or exceeds `width`; otherwise add spaces to reach the requested width. Append spaces for `left` alignment, the default, and prepend them for `right` alignment.
+## pad
+Make `text` at least `width` characters wide by adding spaces only when it is shorter than the requested width. Align left by default by appending spaces, or align right by prepending them when `align` is `"right"`; return the original text unchanged when it already meets or exceeds the width.

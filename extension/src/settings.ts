@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 
 export interface Settings {
+  enabled: boolean;
   model: string;
   endpoint: string;
   pythonPath: string;
@@ -20,6 +21,7 @@ export interface Settings {
 export function getSettings(): Settings {
   const c = vscode.workspace.getConfiguration("prosecode");
   return {
+    enabled: c.get("enabled", true),
     model: c.get("model", ""),
     endpoint: c.get("endpoint", "auto"),
     pythonPath: c.get("pythonPath", ""),

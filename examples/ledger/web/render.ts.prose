@@ -1,14 +1,11 @@
 # render.ts
-Render a report containing monthly totals and top categories in either aligned plain text or compact HTML, using shared month, currency, and padding formatters.
+This file defines the report data shapes and two renderers for JSON produced by the Python CLI. `MonthTotals` describes monthly income, spending, and net values, while `Report` combines keyed monthly totals with ranked category totals. `renderText` produces aligned plain text, and `renderHtml` produces a table plus category list, using shared formatting helpers for months and currency.
 
-Import `formatCents`, `formatMonth`, and `pad` from `./format` to format monetary values, month keys, and aligned text output.
+## b1, MonthTotals, Report
+Import `formatCents`, `formatMonth`, and `pad` from `./format` to format monetary values, month keys, and aligned text. `MonthTotals` requires numeric `in`, `out`, and `net` fields for one month. `Report` contains a `months` record keyed by month identifiers and a `topCategories` list of category-and-cents pairs; both renderers consume this shape.
 
-Define `MonthTotals` with numeric `in`, `out`, and `net` amounts, representing one month's financial totals.
+## renderText
+Render a `Report` as newline-separated plain text. Start with aligned `month`, `in`, `out`, and `net` headings, then iterate over the report's month entries in record iteration order, formatting each key with `formatMonth` and each amount with `formatCents`; use `pad` to keep month names and right-align numeric columns. Add a blank line and a `top categories` heading, then list every category with its name and formatted cents value. Return the complete assembled string, including no extra trailing newline.
 
-Define `Report` with a `months` record mapping month keys to `MonthTotals` and a `topCategories` list of category names paired with numeric amounts.
-
-## `renderText`
-Render a `Report` as newline-separated text: create a padded header, append one aligned row per month using formatted month and cent values, then add a `top categories` section with each category and amount. Preserve the object-entry and category-array iteration order, and return the joined lines.
-
-## `renderHtml`
-Render a `Report` as an HTML table of monthly totals followed by an unordered list of top categories. Format month keys and amounts, assign `neg` to negative net values and `pos` otherwise, and concatenate all generated rows and list items into one string.
+## renderHtml
+Render a `Report` as HTML containing a table for monthly totals and an unordered list for top categories. Each month becomes a table row with formatted month, income, and outgoing values; the net cell receives class `neg` when `t.net` is below zero and `pos` otherwise, so zero is treated as positive. Each category becomes an `li` containing its raw category text and formatted cents value. The function joins generated fragments without separators and returns the table followed by the category list; it performs no HTML escaping, so callers must ensure category data is safe for insertion.

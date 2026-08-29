@@ -145,10 +145,17 @@ def _partition_from_starts(starts: list[int], total: int) -> list[Range]:
     return ranges
 
 
+CHILD_HEADER_RE = re.compile(r"^## child: (.+?)\s*$")
+
+
 def segment_code(code: str, language: str, min_block_lines: int = 3) -> list[Range]:
     lines = split_lines(code)
     if not lines:
         return []
+    if normalize_language(language) == "prosetree":
+        # a directory's synthetic document: one unit per `## child: name` section (blank lines inside)
+        starts = [i for i, ln in enumerate(lines) if CHILD_HEADER_RE.match(ln)]
+        return _partition_from_starts(starts, len(lines))
     units = _units_treesitter(lines, language)
     if units:
         return _group_units(lines, units, min_block_lines)

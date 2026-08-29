@@ -40,14 +40,16 @@ cat DIR.prose ledger/DIR.prose                                   # what the pros
 Then, in VS Code with the extension running (or with `prosesync sync … --changed …` on the CLI):
 
 1. **Local edit, no propagation.** In `ledger/parsing.py`, make `parse_amount` also accept a
-   thousands separator (`"1,500.00"`). Only the `## parse_amount` paragraph should change;
-   `DIR.prose` should not be touched (the file's summary did not change).
+   thousands separator (`"1,500.00"`). Only the paragraph(s) annotated `## parse_amount` should
+   change, and `DIR.prose` should not be touched unless the file's prose says something the
+   directory account relied on.
 2. **Surface change, upward propagation.** Add a public `amount_above(cents)` matcher to
    `ledger/rules/matchers.py`. The file summary gains it, then `ledger/rules/DIR.prose`'s
    `## matchers.py` paragraph follows; `ledger/DIR.prose` follows only if the `rules/` summary
    itself changed.
-3. **Prose → code.** In `ledger/reports.py.prose`, change `## top_categories` to say ties are
-   broken by most recent transaction instead of by name. Watch the code change; run the tests.
+3. **Prose → code.** In `ledger/reports.py.prose`, find the paragraph annotated with
+   `top_categories` and say ties are broken by most recent transaction instead of by name. Only
+   `top_categories` (and its neighbours as context) is sent to the model; run the tests after.
 4. **Downward propagation.** In `ledger/DIR.prose`, say that `reports.py` also provides a
    `budget_status(transactions, limits)` helper comparing spend per category to a limit. Save,
    accept the push-down: `reports.py` gains the function and its prose gains a paragraph.

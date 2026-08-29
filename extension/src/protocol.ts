@@ -3,7 +3,7 @@ export type Side = "prose" | "code";
 export const otherSide = (s: Side): Side => (s === "prose" ? "code" : "prose");
 
 export interface Block { id: string; prose: [number, number]; code: [number, number] }
-export interface Snapshot { prose: string; code: string; blocks: Block[] }
+export interface Snapshot { prose: string; code: string; blocks: Block[]; code_blocks?: Block[] }
 export interface Pair {
   pair_id: string; language: string; code_path: string; prose: string; code: string;
   prose_version: number; code_version: number;
@@ -20,7 +20,7 @@ export interface SyncResponse {
   usage: Record<string, unknown>; warnings: string[]; verification?: VerifyResult | null; code_blocks?: Block[];
 }
 export interface GenerateResponse { prose: string; blocks: Block[]; code_blocks?: Block[]; latency_ms: number; model: string }
-export interface CreateResponse { prose: string; code: string; blocks: Block[] }
+export interface CreateResponse { prose: string; code: string; blocks: Block[]; code_blocks?: Block[] }
 export interface Feedback {
   sync_id: string; outcome: "accepted" | "modified" | "reverted"; dwell_s: number; final_text_by_block: Record<string, string>;
 }

@@ -6,6 +6,7 @@ sync:
   model: "gpt-5.6-luna"          # any OpenAI-compatible model id; verified against /v1/models on first use
   base_url: null                  # null = OPENAI_BASE_URL env or api.openai.com
   prompt_version: "v1"            # which prompts/system_<v>.md to use; logged with every interaction
+  file_mode: "free"               # free: free-form annotated prose (default) | paired: one paragraph per code block
   max_edits: 6                    # server rejects responses with more block edits than this
   context_blocks: 1               # neighbours on each side of an affected block that the model may also edit
   timeout_s: 120                  # per request; broad (summary-driven) syncs can take longer
@@ -18,9 +19,6 @@ sync:
 window:                           # long files: render only editable blocks +- radius in full
   max_full_blocks: 14             # pairs with at most this many blocks are always sent in full
   radius: 2                       # blocks of full context on each side of the editable set
-
-tree:                             # directory prose (DIR.prose)
-  descendant_lines: 40            # max outline lines of descendants included per subdirectory child
 
 segment:
   min_block_lines: 3              # consecutive small top-level nodes (imports, constants) are merged until >= this

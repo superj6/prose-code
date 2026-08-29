@@ -55,6 +55,14 @@ export function activate(context: vscode.ExtensionContext): void {
       registry.forEach((m) => m.setAutoSync(on));
       void vscode.window.showInformationMessage(`Prose Code: auto sync ${on ? "on" : "off"}`);
     }),
+    vscode.commands.registerCommand("prosecode.toggleEnabled", () => {
+      const cfg = vscode.workspace.getConfiguration("prosecode");
+      const on = !cfg.get("enabled", true);
+      void cfg.update("enabled", on, vscode.ConfigurationTarget.Global);
+      registry.forEach((m) => m.setAutoSync(on && getSettings().autoSync));
+      status.set(on ? "idle" : "paused", on ? "enabled" : "disabled (master switch)");
+      void vscode.window.showInformationMessage(`Prose Code: ${on ? "enabled" : "disabled"}`);
+    }),
     vscode.commands.registerCommand("prosecode.showLog", () => out.show()),
     vscode.commands.registerCommand(
       "prosecode.openDirectoryProse",
@@ -75,11 +83,12 @@ export function activate(context: vscode.ExtensionContext): void {
       }),
     ),
     vscode.workspace.onDidChangeTextDocument((e) => {
-      if (e.contentChanges.length === 0) return;
+      if (e.contentChanges.length === 0 || !getSettings().enabled) return;
       const found = registry.find(e.document);
       if (found) found.manager.onUserEdit(found.side);
     }),
     vscode.workspace.onDidSaveTextDocument((doc) => {
+      if (!getSettings().enabled) return;
       const found = registry.find(doc);
       if (found && getSettings().syncOnSave) found.manager.onSave(found.side);
       if (path.basename(doc.uri.fsPath) === "DIR.prose") void maybePushDown(doc);
@@ -89,11 +98,11 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
     vscode.workspace.onDidCreateFiles((e) => {
-      if (getSettings().autoGenerate !== "onCreate") return;
+      if (!getSettings().enabled || getSettings().autoGenerate !== "onCreate") return;
       for (const f of e.files) void registry.ensureProse(f.fsPath, "created");
     }),
-    vscode.workspace.onDidDeleteFiles((e) => registry.onFilesDeleted(e.files.map((f) => f.fsPath))),
-    vscode.workspace.onDidRenameFiles((e) => registry.onFilesRenamed(e.files.map((f) => ({ oldPath: f.oldUri.fsPath, newPath: f.newUri.fsPath })))),
+    vscode.workspace.onDidDeleteFiles((e) => getSettings().enabled && registry.onFilesDeleted(e.files.map((f) => f.fsPath))),
+    vscode.workspace.onDidRenameFiles((e) => getSettings().enabled && registry.onFilesRenamed(e.files.map((f) => ({ oldPath: f.oldUri.fsPath, newPath: f.newUri.fsPath })))),
     vscode.commands.registerCommand(
       "prosecode.initFolder",
       withError(async () => {

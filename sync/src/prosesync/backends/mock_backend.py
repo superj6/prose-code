@@ -37,9 +37,14 @@ class MockBackend:
         user = "\n".join(m["content"] for m in messages if m["role"] == "user")  # repair rounds append a user turn
         self.calls.append({"messages": messages, "schema_name": schema_name})
         if schema_name == "free_prose":
-            code_part = user.split("=== CHILDREN ===", 1)[1]
-            paragraphs = [f"Covers {body.split(chr(10))[0].strip()} in this directory." for _bid, body in _BLOCK_RE.findall(code_part)]
-            obj = {"summary": "Mock summary of the directory.", "paragraphs": paragraphs}
+            is_dir = "=== CHILDREN" in user
+            code_part = user.split("=== CHILDREN", 1)[1] if is_dir else user.split("=== CODE", 1)[1]
+            paragraphs = []
+            for bid, body in _BLOCK_RE.findall(code_part):
+                first = body.split("\n")[0].strip()
+                ref = first.replace("## child: ", "") if is_dir else bid
+                paragraphs.append({"refs": [ref], "prose": f"Covers {ref} here."})
+            obj = {"summary": "Mock summary of the directory." if is_dir else "Mock summary of the file.", "paragraphs": paragraphs}
         elif schema_name == "code_blocks":
             prose_part = user.split("=== PROSE", 1)[1]
             blocks = []
@@ -48,6 +53,8 @@ class MockBackend:
                     continue
                 first = next((ln.strip() for ln in body.split("\n") if ln.strip()), "")
                 blocks.append({"block": bid, "code": f"# {first}\npass"})
+            if not blocks:  # summary-only prose: write the whole file from the summary
+                blocks.append({"block": "b1", "code": "# from summary\npass"})
             obj = {"blocks": blocks}
         elif schema_name == "paragraphs":
             code_part = user.split("=== CODE", 1)[1]
@@ -63,7 +70,7 @@ class MockBackend:
             m = _AFFECTED_LIST_RE.search(user)
             affected = [b.strip() for b in m.group(1).split(",") if b.strip()]
             editable = [b.strip() for b in m.group(2).split(",") if b.strip()]
-            prosetree = "Language: prosetree" in user
+            prosetree = "(free-form pair:" in user  # free mode (files and directories)
             if prosetree:
                 affected = [b for b in affected if b != "(none)"]
             else:
@@ -81,33 +88,33 @@ class MockBackend:
                 prose_bodies = dict(_BLOCK_RE.findall(prose_section))
                 edits = []
                 if target == "prose":
-                    for bid in affected:
-                        pid = "p" + bid[1:]
-                        if pid not in editable:
-                            pid = [e for e in editable if e != "s"][-1]
+                    # edit every editable paragraph except the summary (the engine already narrowed it by annotation)
+                    for pid in [e for e in editable if e != "s"] or []:
                         edits.append({"op": "replace", "block": pid, "text": prose_bodies.get(pid, "").rstrip() + " (updated)", "reason": "mock update"})
                 else:
-                    for pid in affected:
-                        bid = "b" + pid[1:] if pid.startswith("p") else "b1"
-                        if bid not in editable:
-                            bid = editable[-1]
-                        edits.append({"op": "replace", "block": bid, "text": code_bodies.get(bid, "").rstrip() + " (updated)", "reason": "mock update"})
-                    # headings in the prose that name children absent from the code side -> new sections
-                    known = {ln[3:].strip() for body in code_bodies.values() for ln in body.split("\n") if ln.startswith("## ")}
+                    for bid in editable[:1]:
+                        body = code_bodies.get(bid, "").rstrip()
+                        text = body + " (updated)" if "Language: prosetree" in user else f"# {body.splitlines()[0] if body else bid}\npass"
+                        edits.append({"op": "replace", "block": bid, "text": text, "reason": "mock update"})
+                    # `## child: name` lines in the prose naming children absent from the code side -> new sections
+                    known = {ln[len("## child: "):].strip() for body in code_bodies.values() for ln in body.split("\n") if ln.startswith("## child: ")}
                     last = editable[-1]
                     extra = ""
                     for body in prose_bodies.values():
                         for ln in body.split("\n"):
-                            if ln.startswith("## ") and ln[3:].strip() not in known:
-                                name = ln[3:].strip()
+                            if ln.startswith("## child: ") and ln[len("## child: "):].strip() not in known:
+                                name = ln[len("## child: "):].strip()
                                 after = body.split(ln, 1)[1].strip().split("\n")[0] if ln in body else ""
-                                extra += f"\n\n## {name}\n{after or 'New child.'}"
+                                extra += f"\n\n## child: {name}\n# {name}\n{after or 'New child.'}"
                     if extra:
                         base_text = next((e["text"] for e in edits if e["block"] == last), code_bodies.get(last, "").rstrip())
                         edits = [e for e in edits if e["block"] != last] + [{"op": "replace", "block": last, "text": base_text + extra, "reason": "mock create"}]
                 obj = {"edits": edits}
                 raw = json.dumps(obj)
                 for item in obj["edits"]:
+                    if on_partial is not None and item.get("text"):
+                        await on_partial(item["block"], item["text"][: len(item["text"]) // 2])
+                        await on_partial(item["block"], item["text"])
                     if on_object is not None:
                         await on_object(item)
                 return BackendResult(raw=raw, model="mock", usage={"input_tokens": 0, "output_tokens": 0})

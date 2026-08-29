@@ -51,6 +51,15 @@ Risks: cascades (an edit at depth 3 touching 3 ancestors ≈ 4 model calls — a
 with cached prefixes, but never synchronous with typing); summaries drifting from their files if a
 file-level sync fails midway (make the parent sync depend on the file sync's `done`).
 
+## Free-form annotated prose (2026-08-29)
+
+All prose is free-form: a summary block plus annotated paragraphs (`## names` = the code units or
+children a paragraph describes). Annotations replace the 1:1 block pairing as the locality
+mechanism for syncs, windowing and propagation; `sync.file_mode: paired` keeps the old strict form
+(still used by the eval set and training records). Next: a free-mode eval set (annotation
+precision, collateral edits by paragraph), a `summary_stable` metric, and free-mode records in
+the data pipeline.
+
 ## Data recipe (Phase 3)
 
 1. Seed corpus: 20–300-line permissive files (The Stack v2 dedup, CodeSearchNet, MBPP/HumanEval

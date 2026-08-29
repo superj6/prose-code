@@ -65,12 +65,14 @@ is the training signal for the custom model.
 
 ## How sync works
 
-* The code is cut into **blocks** (tree-sitter top-level units, small ones grouped); the prose has
-  exactly one paragraph per block. The server keeps the block map; the model only ever names
-  blocks (`replace b3`, `delete b5`) — never line numbers.
-* On a user edit the server diffs against the last synced snapshot, shifts the block map
-  arithmetically, marks the touched blocks AFFECTED, and asks the model for edits to the other
-  side, restricted to affected blocks ± 1 neighbour. Everything else is preserved verbatim.
+* The code is cut into **blocks** (tree-sitter top-level units, small ones grouped); the prose is
+  free-form — a `# file` summary, then paragraphs that each start with a `## names` annotation
+  naming the units they describe (see `docs/prose-grammar.md`). The model only ever names blocks
+  (`replace p3`, `replace b5`) — never line numbers.
+* On a user edit the server diffs against the last synced snapshot, shifts the block maps
+  arithmetically, and uses the annotations to pick the counterparts: changed code units → the
+  paragraphs annotated with them; changed paragraphs → the code blocks they name. Only those are
+  editable and sent in full; everything else is collapsed and preserved verbatim.
 * Edits are strict-JSON, streamed one at a time, validated, applied, and pushed to the editor.
   If a replaced block now contains several units on both sides, it is split.
 * The extension never re-syncs its own edits (an `applying` flag plus snapshot-based diffing),
@@ -79,11 +81,11 @@ is the training signal for the custom model.
 
 ## Hierarchical prose
 
-Every file's prose starts with a `# file` summary block; every directory can have a `DIR.prose`:
-a `# dir/` summary plus a free-form account of the directory (as many paragraphs as it deserves,
-grounded in the children's summaries and an outline of all descendants). The directory pair is
-synced without one-to-one pairing — the changed side's blocks pick what is affected, the model
-rewrites only the paragraphs (or child summaries) whose claims changed:
+Every directory can have a `DIR.prose`: a `# dir/` summary plus a free-form account of the
+directory whose paragraphs are annotated with the children they describe (`## cli.py, rules/`).
+Its input is each immediate file's whole prose and each immediate subdirectory's whole `DIR.prose`
+(which already covers its subtree). Annotations keep propagation local: a child's change touches
+only the paragraphs naming it, and a paragraph edit touches only the children it names:
 
 ```sh
 .venv/bin/prosesync gen src/                 # prose for every file under src/ + DIR.prose per directory (deepest first)

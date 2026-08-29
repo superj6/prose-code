@@ -86,7 +86,18 @@ FREE_PROSE_SCHEMA = {
     "additionalProperties": False,
     "properties": {
         "summary": {"type": "string", "description": "One paragraph for the directory as a whole"},
-        "paragraphs": {"type": "array", "items": {"type": "string", "description": "One paragraph, no blank lines"}},
+        "paragraphs": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "refs": {"type": "array", "items": {"type": "string"}, "description": "Exact names of the units / children this paragraph describes"},
+                    "prose": {"type": "string", "description": "One paragraph, no blank lines"},
+                },
+                "required": ["refs", "prose"],
+            },
+        },
     },
     "required": ["summary", "paragraphs"],
 }

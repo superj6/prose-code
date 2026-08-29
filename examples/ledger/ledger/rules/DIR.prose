@@ -1,6 +1,11 @@
 # rules/
-This package provides a rule-based transaction categorisation system. It exposes the public API through `__init__.py`, defines transaction matching strategies in `matchers.py`, and coordinates ordered rule loading and application in `engine.py`.
+This directory contains the public-facing building blocks of a rule-based transaction categorisation system. `engine.py` defines immutable rules, ordered first-match-wins categorisation, and text-based rule loading; `matchers.py` supplies keyword, regular-expression, and expense-threshold predicates; and `__init__.py` presents the principal types, factories, and operations as the supported public API.
 
-`matchers.py` contains the reusable predicate factories that determine whether a transaction matches a criterion: keyword and regular-expression matchers inspect payee or note text, while an amount matcher identifies small expenses. Each factory captures its configuration and returns a callable accepting a `Transaction` and yielding a boolean result.
+## __init__.py, engine.py, matchers.py
+Start with `__init__.py` for the intended entry points: it re-exports `Rule`, `categorise`, `load_rules`, `Matcher`, `keyword`, and `regex`, while keeping implementation details out of wildcard imports. The underlying responsibilities are split between `engine.py`, which consumes matchers to define and apply rules, and `matchers.py`, which creates the callable conditions tested against transactions.
 
-`engine.py` is the main processing layer. It reads ordered categorisation rules, skips blank lines and comments, retains each rule’s source text, and applies rules to transactions in order, assigning the category associated with the first successful match. `__init__.py` gathers and re-exports these rule, matching, and categorisation interfaces as the package’s public entry point.
+## engine.py, matchers.py
+The main flow begins with matcher factories in `matchers.py`: `keyword` searches payees and notes case-insensitively, `regex` searches payees with a compiled case-insensitive expression, and `amount_below` identifies expenses below a strict cent threshold. `engine.py` packages these predicates into immutable `Rule` records, then `categorise` checks rules in order, assigns only the first matching category, and returns transaction copies without mutating the originals.
+
+## engine.py
+Use `load_rules` when rules arrive as human-readable lines rather than constructed objects. It removes comments and blank lines, validates each numbered specification, turns slash-delimited specifications into regular-expression matchers and other specifications into comma-separated keyword matchers, preserves rule order and cleaned source text, and raises `LedgerError` for malformed lines. The resulting rules are ready for `categorise`, whose first-match-wins ordering makes rule placement significant.

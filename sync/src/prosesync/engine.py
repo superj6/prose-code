@@ -10,6 +10,7 @@ from typing import Any
 
 from omegaconf import DictConfig
 
+from . import annotations as A
 from . import blocks as B
 from .align import NeedsRegenerate, affected, realign
 from .apply import ApplyError, DocState
@@ -56,6 +57,13 @@ class Engine:
         self.min_block_lines = int(cfg.segment.min_block_lines)
         self.prompt_version = str(cfg.sync.prompt_version)
 
+    def mode_for(self, pair) -> str:
+        return pair.mode or str(self.cfg.sync.get("file_mode", "free"))
+
+    @property
+    def file_mode(self) -> str:
+        return str(self.cfg.sync.get("file_mode", "free"))
+
     # ------------------------------------------------------------------ generate
     async def generate(
         self, code: str, language: str, code_path: str = "", model: str | None = None, kind: str = "generate", title: str | None = None
@@ -97,6 +105,12 @@ class Engine:
         )
         return resp
 
+    async def generate_prose(self, code: str, language: str, code_path: str = "", model: str | None = None) -> GenerateResponse:
+        """Prose for a file in the configured file_mode (free-form annotated, or paired)."""
+        if self.file_mode == "free":
+            return await self.generate_free(code, language, code_path, title=Path(code_path).name if code_path else "file", model=model)
+        return await self.generate(code, language, code_path, model=model)
+
     # ------------------------------------------------------------------ free-form (directory) generation
     async def generate_free(self, code: str, language: str, code_path: str = "", title: str = "", model: str | None = None) -> GenerateResponse:
         """Free-form prose for a synthetic child-summary document: summary + any number of paragraphs."""
@@ -116,7 +130,17 @@ class Engine:
             return "\n".join(ln.rstrip() for ln in str(text).strip().split("\n") if ln.strip())
 
         paragraphs = [f"# {title or Path(code_path).name}\n{clean(parsed.get('summary') or '(no summary)')}"]
-        paragraphs += [clean(pg) for pg in parsed.get("paragraphs", []) if clean(pg)]
+        for pg in parsed.get("paragraphs", []):
+            if isinstance(pg, str):
+                text, refs = clean(pg), []
+            else:
+                text, refs = clean(pg.get("prose", "")), [str(r).strip() for r in pg.get("refs", []) if str(r).strip()]
+            if not text:
+                continue
+            if text.startswith("## "):  # the model put the annotation inside the text already
+                paragraphs.append(text)
+            else:
+                paragraphs.append((f"## {', '.join(refs)}\n" if refs else "") + text)
         prose = "\n\n".join(paragraphs) + "\n"
         blocks = B.side_partition(prose, "prose", prefix="p")
         resp = GenerateResponse(prose=prose, blocks=blocks, code_blocks=code_blocks, latency_ms=int((time.time() - t0) * 1000), model=result.model, usage=result.usage)
@@ -139,18 +163,26 @@ class Engine:
             # Summary only (e.g. a child named in DIR.prose): write the whole file as one block.
             # Callers that need paragraphs regenerate them from the code (see create_from_prose).
             has_summary, body = False, prose_ranges
-        blocks = B.make_blocks(body, [(i, i + 1) for i in range(len(body))])
-        if has_summary:
-            blocks.insert(0, Block(id=B.SUMMARY_ID, prose=tuple(prose_ranges[0]), code=(0, 0)))
-        messages = build_generate_code_messages(language=language, prose=prose, blocks=blocks, version=self.prompt_version)
+        if self.file_mode == "free":
+            blocks = B.side_partition(prose, "prose", prefix="p")
+        else:
+            blocks = B.make_blocks(body, [(i, i + 1) for i in range(len(body))])
+            if has_summary:
+                blocks.insert(0, Block(id=B.SUMMARY_ID, prose=tuple(prose_ranges[0]), code=(0, 0)))
+        free = self.file_mode == "free"
+        messages = build_generate_code_messages(language=language, prose=prose, blocks=blocks, version=self.prompt_version, free=free)
         result = await self.backend.complete_json(
             messages, CODE_BLOCKS_SCHEMA, "code_blocks", model=model, cache_key=f"prosesync:{pair_id_for(code_path)}"
         )
         import json
 
-        by_block = {b["block"]: b["code"] for b in json.loads(result.raw)["blocks"]}
+        raw_blocks = json.loads(result.raw)["blocks"]
+        by_block = {b["block"]: b["code"] for b in raw_blocks}
         code_parts, code_ranges, pos = [], [], 0
         body_blocks = [b for b in blocks if b.id != B.SUMMARY_ID]
+        if free:
+            body_blocks = [Block(id=str(b.get("block") or f"c{i}"), prose=(0, 0), code=(0, 0)) for i, b in enumerate(raw_blocks)]
+            by_block = {b.id: raw_blocks[i]["code"] for i, b in enumerate(body_blocks)}
         for i, b in enumerate(body_blocks):
             text = (by_block.get(b.id) or "").replace("\r\n", "\n").strip("\n")
             lines = text.split("\n") if text else ["pass" if language == "python" else ""]
@@ -160,6 +192,15 @@ class Engine:
             code_ranges.append((pos, pos + len(lines)))
             pos += len(lines)
         code = "".join(code_parts)
+        if free:
+            # free mode: the prose partition is its own; the code partition is re-derived from the result
+            final = B.side_partition(prose, "prose", prefix="p")
+            code_blocks_free = B.side_partition(code, "code", language, prefix="b")
+            resp = GenerateCodeResponse(code=code, prose=prose, blocks=final, latency_ms=int((time.time() - t0) * 1000), model=result.model, usage=result.usage)
+            resp.code_blocks = code_blocks_free
+            self.log.write("generate_code", {"pair_id": pair_id_for(code_path), "language": language, "mode": "free", "prompt_version": self.prompt_version,
+                                             "model": result.model, "prose": prose, "code": code, "raw": result.raw, "latency_ms": resp.latency_ms, "usage": result.usage})
+            return resp
         final = [b.with_range("code", code_ranges[i]) for i, b in enumerate(body_blocks)]
         if has_summary:
             final.insert(0, blocks[0])
@@ -169,15 +210,27 @@ class Engine:
                                          "latency_ms": resp.latency_ms, "usage": result.usage})
         return resp
 
-    async def create_from_prose(self, prose: str, language: str, code_path: str = "") -> tuple[str, str, list[Block]]:
+    async def create_from_prose(self, prose: str, language: str, code_path: str = "") -> tuple[str, str, list[Block], list[Block]]:
         """Prose (possibly a bare ``# name`` summary) -> (prose, code, blocks) for a brand-new file.
         With only a summary, the code is written from it and the paragraphs are then derived from
         the code, keeping the author's summary."""
         ranges = B.segment_prose(prose)
         summary_only = len(ranges) == 1 and B.is_summary_paragraph(prose, ranges[0])
         gen_code = await self.generate_code(prose, language, code_path)
+        if self.file_mode == "free":
+            code_blocks = B.side_partition(gen_code.code, "code", language, prefix="b")
+            if summary_only:
+                gen = await self.generate_free(gen_code.code, language, code_path, title=Path(code_path).name)
+                heading = B.split_lines(prose)[ranges[0][0]].strip()[2:].strip()
+                body = "\n".join(ln for ln in B.split_lines(prose)[ranges[0][0] + 1 : ranges[0][1]] if ln.strip())
+                from .tree import replace_summary
+
+                final_prose = replace_summary(gen.prose, heading, body)
+            else:
+                final_prose = A.auto_annotate(prose, A.block_names(gen_code.code, language, code_blocks))
+            return final_prose, gen_code.code, B.side_partition(final_prose, "prose", prefix="p"), code_blocks
         if not summary_only:
-            return gen_code.prose, gen_code.code, gen_code.blocks
+            return gen_code.prose, gen_code.code, gen_code.blocks, []
         heading = B.split_lines(prose)[ranges[0][0]].strip()[2:].strip()
         summary_body = "\n".join(ln for ln in B.split_lines(prose)[ranges[0][0] + 1 : ranges[0][1]] if ln.strip())
         gen = await self.generate(gen_code.code, language, code_path)
@@ -187,7 +240,7 @@ class Engine:
         blocks = B.pair_ranges(final_prose, B.segment_prose(final_prose), code_ranges)
         if blocks is None:
             raise RuntimeError("regenerated prose does not pair with the generated code")
-        return final_prose, gen_code.code, blocks
+        return final_prose, gen_code.code, blocks, []
 
     # ------------------------------------------------------------------ sync
     async def sync(
@@ -196,7 +249,7 @@ class Engine:
         t0 = time.time()
         pair, changed = req.pair, req.change.side
         target = other_side(changed)
-        if pair.mode == "free":
+        if self.mode_for(pair) == "free":
             return await self._sync_free(req, on_line_edit, on_preview, t0)
         blocks, hunks, other_hunks, base_blocks = realign(
             req.base, pair.prose, pair.code, pair.language, changed, req.other_side_dirty, self.min_block_lines
@@ -384,8 +437,44 @@ class Engine:
             code_blocks = B.side_partition(pair.code, "code", language, prefix="b")
         hunks = hunks_code if changed == "code" else hunks_prose
         tgt_blocks = prose_blocks if changed == "code" else code_blocks
-        editable = [b.id for b in tgt_blocks]
         warnings: list[str] = []
+        notes: list[str] = []
+        names = A.block_names(pair.code, language, code_blocks)
+        refs = A.paragraph_refs(pair.prose, prose_blocks)
+        context = int(self.cfg.sync.context_blocks)
+        max_full = int(self.cfg.window.max_full_blocks)
+        code_ids = [b.id for b in code_blocks]
+        prose_ids = [b.id for b in prose_blocks]
+
+        def with_context(ids: list[str], universe: list[str]) -> list[str]:
+            keep: set[int] = set()
+            for i, bid in enumerate(universe):
+                if bid in ids:
+                    keep.update(range(max(0, i - context), min(len(universe), i + context + 1)))
+            return [universe[i] for i in sorted(keep)]
+
+        if changed == "code":
+            # only paragraphs annotated with the changed units (+ the summary) may change
+            related = A.related_paragraphs(affected_ids, names, refs)
+            if not related:
+                neighbours = with_context(affected_ids, code_ids)
+                related = A.related_paragraphs(neighbours, names, refs) or [pid for pid in prose_ids if pid != B.SUMMARY_ID][-1:]
+                if affected_ids:
+                    notes.append("no paragraph mentions the changed unit(s) yet; add one next to the editable paragraph if the change deserves it")
+            editable = [B.SUMMARY_ID] + [pid for pid in prose_ids if pid in related] if B.SUMMARY_ID in prose_ids else [pid for pid in prose_ids if pid in related]
+            mentioned = {bid for pid in related for bid in A.resolve(refs.get(pid, []), names)[0]}
+            full_ids = with_context(list(dict.fromkeys(affected_ids + sorted(mentioned, key=code_ids.index))), code_ids)
+        else:
+            tokens = [t for pid in affected_ids for t in refs.get(pid, [])]
+            resolved, unresolved = A.resolve(tokens, names)
+            unannotated = [pid for pid in affected_ids if pid != B.SUMMARY_ID and not refs.get(pid)]
+            if unresolved:
+                notes.append(f"annotations not found in the code: {', '.join(unresolved)} (create the unit if the prose calls for it)")
+            if unannotated:
+                notes.append("an edited paragraph has no `## names` annotation: apply it where it belongs and add the annotation")
+            editable = with_context(resolved, code_ids) if resolved and not unannotated and B.SUMMARY_ID not in affected_ids else code_ids
+            full_ids = editable
+        full_code = None if len(code_ids) <= max_full else [bid for bid in code_ids if bid in set(full_ids) or bid == code_ids[0]]
         state = DocState(pair.prose, pair.code, tgt_blocks, language, self.min_block_lines)
         line_edits: list[LineEdit] = []
         applied: list[Edit] = []
@@ -425,18 +514,33 @@ class Engine:
                 if on_line_edit is not None:
                     await on_line_edit(le)
 
+        preview_state = {"last": 0.0, "block": None}
+        interval = float(self.cfg.sync.get("preview_interval_ms", 150)) / 1000.0
+
+        async def on_partial(block: str | None, text: str) -> None:
+            if on_preview is None or not self.cfg.sync.get("preview", True) or not block or block not in state.ids:
+                return
+            now = time.time()
+            if now - preview_state["last"] < interval and block == preview_state["block"]:
+                return
+            preview_state["last"], preview_state["block"] = now, block
+            start, _ = state.line_range(target, state.index_of(block))
+            await on_preview(Preview(side=target, block=block, start=start, text=text))
+
         messages = build_free_sync_messages(
             language=language, prose=pair.prose, code=pair.code, prose_blocks=prose_blocks, code_blocks=code_blocks, changed=changed,
             hunks=hunks, affected=affected_ids, editable=editable, version=self.prompt_version, unpushed=unpushed,
+            full_code=full_code, notes=notes,
         )
         result = await self.backend.complete_json(
-            messages, EDITS_SCHEMA, "edits", on_object=on_object, model=req.options.model, cache_key=f"prosesync:{pair.pair_id}"
+            messages, EDITS_SCHEMA, "edits", on_object=on_object, model=req.options.model, cache_key=f"prosesync:{pair.pair_id}",
+            on_partial=on_partial,
         )
         resp = finish(result.model, result.usage, warnings)
         self.log.write("sync", {
             "sync_id": req.request_id, "pair_id": pair.pair_id, "language": language, "mode": "free", "prompt_version": self.prompt_version,
             "model": result.model, "changed_side": changed, "prose_before": pair.prose, "code_before": pair.code, "hunks": hunks,
-            "affected": affected_ids, "editable": editable, "raw": result.raw, "edits_applied": applied, "line_edits": line_edits,
+            "affected": affected_ids, "editable": editable, "window": full_code, "raw": result.raw, "edits_applied": applied, "line_edits": line_edits,
             "prose_after": resp.prose, "code_after": resp.code, "blocks_after": resp.blocks, "code_blocks_after": resp.code_blocks,
             "warnings": warnings, "latency_ms": resp.latency_ms, "usage": result.usage,
         })

@@ -62,6 +62,27 @@ def base_texts(code_path: Path, prose_path: Path) -> tuple[str, str, str]:
     return prose_path.read_text(), code_path.read_text(), "worktree"
 
 
+def rebuild_snapshot(code_path: Path, prose_path: Path, language: str, mode: str, min_block_lines: int = 3) -> Snapshot | None:
+    """Rebuild a file pair's snapshot from the committed (else current) texts when the map is
+    missing. Free mode always succeeds (independent partitions); paired mode needs the counts to
+    agree."""
+    prose, code, _source = base_texts(code_path, prose_path)
+    from . import blocks as B
+
+    if mode == "free":
+        snap = Snapshot(prose=prose, code=code, blocks=B.side_partition(prose, "prose", prefix="p"),
+                        code_blocks=B.side_partition(code, "code", language, prefix="b"))
+    else:
+        from .align import resegment
+
+        blocks = resegment(prose, code, language, min_block_lines)
+        if blocks is None:
+            return None
+        snap = Snapshot(prose=prose, code=code, blocks=blocks)
+    save_snapshot(code_path, snap)
+    return snap
+
+
 def save_snapshot(code_path: Path, snap: Snapshot) -> None:
     p = map_path(code_path)
     p.parent.mkdir(parents=True, exist_ok=True)

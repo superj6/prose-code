@@ -148,19 +148,24 @@ def build_generate_messages(
     ]
 
 
-def build_generate_code_messages(*, language: str, prose: str, blocks: Sequence[Block], version: str = "v1") -> list[dict[str, str]]:
+def build_generate_code_messages(
+    *, language: str, prose: str, blocks: Sequence[Block], version: str = "v1", free: bool = False
+) -> list[dict[str, str]]:
     body = [b for b in blocks if b.id != SUMMARY_ID]
     user = [
         f"Language: {language}",
-        f"Write the code for each of the {len(body)} numbered blocks, in order.",
+        "Write the complete file this prose describes, one code block per top-level unit, in order."
+        if free
+        else f"Write the code for each of the {len(body)} numbered blocks, in order.",
         "",
         "=== PROSE ===",
         render_blocks(prose, blocks, "prose"),
         "",
-        'Return JSON: {"blocks": [{"block": "b1", "code": "..."}, ...]} with one entry per numbered block.',
+        'Return JSON: {"blocks": [{"block": "b1", "code": "..."}, ...]}'
+        + (" with one entry per code unit you write (block ids are yours to choose)." if free else " with one entry per numbered block."),
     ]
     return [
-        {"role": "system", "content": system_prompt("generate_code", version)},
+        {"role": "system", "content": system_prompt("generate_code_free" if free else "generate_code", version)},
         {"role": "user", "content": "\n".join(user)},
     ]
 
@@ -168,16 +173,20 @@ def build_generate_code_messages(*, language: str, prose: str, blocks: Sequence[
 def build_free_sync_messages(
     *, language: str, prose: str, code: str, prose_blocks: Sequence[Block], code_blocks: Sequence[Block], changed: Side,
     hunks: Sequence[Hunk], affected: Sequence[str], editable: Sequence[str], version: str = "v1", unpushed: bool = False,
+    full_code: Sequence[str] | None = None, notes: Sequence[str] = (),
 ) -> list[dict[str, str]]:
-    """Free mode (directory prose): each side has its own partition; the model edits the target side."""
+    """Free mode: each side has its own partition; annotations link paragraphs to blocks; the model
+    edits the target side. ``full_code`` limits which code blocks are rendered in full."""
     target = other_side(changed)
+    is_dir = language == "prosetree"
     user = [
         f"Language: {language}",
+        "(free-form pair: paragraphs carry `## names` annotations naming the blocks they describe)",
         "",
-        "=== CODE (one block per immediate child: its summary, and for directories an outline of all descendants) ===",
-        render_blocks(code, code_blocks, "code"),
+        "=== CODE (one block per immediate child: `## child: name` + that child's entire prose) ===" if is_dir else "=== CODE ===",
+        render_blocks(code, code_blocks, "code", full_code),
         "",
-        "=== PROSE (free-form account of the directory) ===",
+        "=== PROSE (free-form account of the directory) ===" if is_dir else "=== PROSE (free-form; `## names` lines are annotations) ===",
         render_blocks(prose, prose_blocks, "prose"),
         "",
         f"=== CHANGE ({changed} side, unified diff vs the last synced state) ===",
@@ -185,6 +194,10 @@ def build_free_sync_messages(
     ]
     if unpushed:
         user += ["", "NOTE: the PROSE side also has user edits that have not been pushed to the children yet; leave them alone."]
+    if full_code is not None:
+        user += ["", "Code blocks shown as (collapsed: ...) are unchanged context and are not editable."]
+    for n in notes:
+        user += ["", f"NOTE: {n}"]
     user += [
         "",
         f"The {changed.upper()} side changed. Produce edits to the {target.upper()} side.",
@@ -192,22 +205,28 @@ def build_free_sync_messages(
         f'Return JSON: {{"edits": [{{"op", "block", "text", "reason"}}]}} with edits to the {target.upper()} side only.',
     ]
     return [
-        {"role": "system", "content": system_prompt("system_free", version)},
+        {"role": "system", "content": system_prompt("system_free" if is_dir else "system_freefile", version)},
         {"role": "user", "content": "\n".join(user)},
     ]
 
 
 def build_generate_free_messages(*, language: str, code: str, blocks: Sequence[Block], version: str = "v1") -> list[dict[str, str]]:
+    is_dir = language == "prosetree"
     user = [
         f"Language: {language}",
-        f"The directory has {len(blocks)} immediate children (blocks). Write the summary and as many paragraphs as it deserves.",
+        (
+            f"The directory has {len(blocks)} immediate children (blocks, each `## child: name` + its whole prose)."
+            if is_dir
+            else f"The file has {len(blocks)} code blocks."
+        )
+        + " Write the summary and as many annotated paragraphs as it deserves.",
         "",
-        "=== CHILDREN ===",
+        "=== CHILDREN ===" if is_dir else "=== CODE ===",
         render_blocks(code, blocks, "code"),
         "",
-        'Return JSON: {"summary": "...", "paragraphs": ["...", "..."]}.',
+        'Return JSON: {"summary": "...", "paragraphs": [{"refs": ["name", ...], "prose": "..."}, ...]}.',
     ]
     return [
-        {"role": "system", "content": system_prompt("generate_dir", version)},
+        {"role": "system", "content": system_prompt("generate_dir" if is_dir else "generate_file", version)},
         {"role": "user", "content": "\n".join(user)},
     ]

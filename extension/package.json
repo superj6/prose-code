@@ -69,6 +69,7 @@
     "configuration": {
       "title": "Prose Code",
       "properties": {
+        "prosecode.enabled": { "type": "boolean", "default": true, "description": "Master switch. Off = no syncing, generation, propagation or push-down; commands still work on demand." },
         "prosecode.model": {
           "type": "string",
           "default": "gpt-5.6-luna",

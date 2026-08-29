@@ -1,15 +1,14 @@
 # engine.py
-This module loads ordered categorisation rules and applies them to transactions, assigning the category from the first matching rule. It supports keyword and regular-expression matchers, ignores blank lines and comments in rule files, and records each rule’s source text.
+This file defines an ordered transaction-categorisation rule system. It represents each rule with a category, a matcher, and its source text; applies rules to transactions using first-match-wins semantics without mutating the originals; and parses human-readable rule lines into keyword- or regular-expression-based matchers, reporting malformed lines with their line numbers.
 
-Declare the module’s purpose—apply ordered rules with first-match precedence—and enable postponed annotations while importing iterable and dataclass utilities.
-
-Import `LedgerError` and `Transaction` model types, plus the `Matcher`, `keyword`, and `regex` matcher interfaces used to construct and apply rules.
+## b1, b2
+Import the iterable and dataclass utilities, along with `LedgerError`, `Transaction`, and the matcher-building helpers `keyword` and `regex`. These dependencies support immutable rule records, flexible input collections, transaction copies, and the two rule-specification formats accepted by the loader.
 
 ## Rule
-Represent an immutable categorisation rule with a category name, a callable `matcher`, and optional original `source` text for diagnostics.
+Represent one categorisation rule as an immutable record containing the target `category`, a callable `matcher`, and optional `source` text. Leave `source` empty by default; callers loading rules from text can retain the original cleaned line for diagnostics or later inspection.
 
 ## categorise
-Return new transaction values with categories assigned by scanning each transaction’s rules in order; apply and stop at the first matcher that returns true, otherwise preserve the transaction unchanged.
+Accept any iterable of `Transaction` objects and an ordered list of `Rule` objects, then return a new list. For each transaction, test rules in list order and apply only the first matching rule by replacing the transaction with the result of `with_category(rule.category)`; stop checking that transaction immediately after a match. Preserve transactions unchanged when no rule matches, and rely on `with_category` so the input transaction objects are not mutated.
 
 ## load_rules
-Parse rule lines into `Rule` objects, numbering lines from one, removing comments beginning at `#`, and skipping blank results. Require each remaining line to contain a nonempty `category: spec`; interpret a nonempty slash-delimited spec as a regular expression, otherwise split the spec on commas into trimmed keywords, and preserve the cleaned line as the rule source.
+Parse each input line into a `Rule`, numbering lines from one for error messages. Strip inline comments beginning with `#` and ignore blank or comment-only lines. Require a nonempty specification after the first `:`; otherwise raise `LedgerError` with the offending line number. Interpret a specification enclosed by leading and trailing `/` characters, with more than two total characters, as a regular expression passed without its delimiters to `regex`; interpret every other specification as a comma-separated list of trimmed, nonempty keywords passed to `keyword`. Strip whitespace from the category, retain the cleaned uncommented line as the rule's `source`, preserve input order, and return the resulting list.
