@@ -13,7 +13,7 @@
   ],
   "activationEvents": [
     "onLanguage:prose",
-    "onCommand:prosecode.openPair"
+    "onStartupFinished"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -50,8 +50,24 @@
         "title": "Prose Code: Toggle Auto Sync"
       },
       {
+        "command": "prosecode.toggleEnabled",
+        "title": "Prose Code: Enable / Disable (master switch)"
+      },
+      {
         "command": "prosecode.regenerateProse",
         "title": "Prose Code: Regenerate Prose From Code"
+      },
+      {
+        "command": "prosecode.openDirectoryProse",
+        "title": "Prose Code: Open Directory Prose (generate if missing)"
+      },
+      {
+        "command": "prosecode.pushDown",
+        "title": "Prose Code: Push Directory Prose Down Into Children"
+      },
+      {
+        "command": "prosecode.initFolder",
+        "title": "Prose Code: Initialize Prose For Folder (all files + DIR.prose)"
       },
       {
         "command": "prosecode.showLog",
@@ -60,12 +76,27 @@
     ],
     "menus": {
       "explorer/context": [
-        { "command": "prosecode.initFolder", "when": "explorerResourceIsFolder", "group": "prosecode@1" },
-        { "command": "prosecode.openDirectoryProse", "when": "explorerResourceIsFolder", "group": "prosecode@2" },
-        { "command": "prosecode.openPair", "when": "!explorerResourceIsFolder && resourceLangId != prose", "group": "prosecode@3" }
+        {
+          "command": "prosecode.initFolder",
+          "when": "explorerResourceIsFolder",
+          "group": "prosecode@1"
+        },
+        {
+          "command": "prosecode.openDirectoryProse",
+          "when": "explorerResourceIsFolder",
+          "group": "prosecode@2"
+        },
+        {
+          "command": "prosecode.openPair",
+          "when": "!explorerResourceIsFolder && resourceLangId != prose",
+          "group": "prosecode@3"
+        }
       ],
       "commandPalette": [
-        { "command": "prosecode.pushDown", "when": "resourceFilename == DIR.prose" }
+        {
+          "command": "prosecode.pushDown",
+          "when": "resourceFilename == DIR.prose"
+        }
       ]
     },
     "keybindings": [
@@ -79,7 +110,11 @@
     "configuration": {
       "title": "Prose Code",
       "properties": {
-        "prosecode.enabled": { "type": "boolean", "default": true, "description": "Master switch. Off = no syncing, generation, propagation or push-down; commands still work on demand." },
+        "prosecode.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Master switch. Off = no syncing, generation, propagation or push-down; commands still work on demand."
+        },
         "prosecode.model": {
           "type": "string",
           "default": "gpt-5.6-luna",
