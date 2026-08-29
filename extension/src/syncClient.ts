@@ -35,7 +35,9 @@ export class SyncClient implements vscode.Disposable {
 
   private async spawnServer(): Promise<string> {
     const s = this.settings();
-    const args = ["-m", "prosesync.cli", "--backend", s.backend, "serve"];
+    const args = ["-m", "prosesync.cli", "--backend", s.backend];
+    if (s.model) args.push("--override", `sync.model=${s.model}`); // one setting governs sync, generate and tree ops
+    args.push("serve");
     this.out.appendLine(`[server] ${this.python()} ${args.join(" ")}`);
     const proc = spawn(this.python(), args, { cwd: this.repoRoot(), env: { ...process.env, PYTHONUNBUFFERED: "1" } });
     this.proc = proc;
