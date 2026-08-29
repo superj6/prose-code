@@ -42,7 +42,7 @@ class MockBackend:
             for bid, body in _BLOCK_RE.findall(code_part):
                 first = next((ln.strip() for ln in body.split("\n") if ln.strip()), "(empty)")
                 paragraphs.append({"block": bid, "prose": f"Block {bid}: describes `{first}`"})
-            obj = {"paragraphs": paragraphs}
+            obj = {"summary": "Mock summary of the file.", "paragraphs": paragraphs}
         else:
             target = _TARGET_RE.search(user).group(1).lower()
             source_section = user.split("=== CODE ===" if target == "prose" else "=== PROSE ===", 1)[1]

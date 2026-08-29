@@ -43,15 +43,18 @@ def realign(
 def resegment(prose: str, code: str, language: str, min_block_lines: int = 3) -> list[Block] | None:
     """Rebuild a block map from scratch by pairing paragraphs with code units in order.
 
-    The counts must agree, and where both a paragraph heading (``## name``) and the code unit carry
-    a name they must match - otherwise the prose is stale and the caller must regenerate."""
+    The counts must agree (a leading ``# summary`` paragraph is allowed and pairs with no code), and
+    where both a paragraph heading (``## name``) and the code unit carry a name they must match -
+    otherwise the prose is stale and the caller must regenerate."""
     pr = B.segment_prose(prose)
     cr = B.segment_code(code, language, min_block_lines)
-    if not pr or not cr or len(pr) != len(cr):
+    blocks = B.pair_ranges(prose, pr, cr) if pr and cr else None
+    if blocks is None:
         return None
-    if names_conflict(prose_heading_names(prose, pr), code_unit_names(code, language, cr)) is not None:
+    body = [b for b in blocks if b.id != B.SUMMARY_ID]
+    if names_conflict(prose_heading_names(prose, [b.prose for b in body]), code_unit_names(code, language, cr)) is not None:
         return None
-    return B.make_blocks(pr, cr)
+    return blocks
 
 
 def affected(blocks: Sequence[Block], hunks: Sequence[Hunk], side: Side, context: int) -> tuple[list[str], list[str]]:

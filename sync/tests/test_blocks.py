@@ -63,3 +63,14 @@ def test_shift_delete_whole_block_leaves_empty_range():
     blocks = [Block(id="b1", prose=(0, 1), code=(0, 3)), Block(id="b2", prose=(1, 2), code=(3, 6)), Block(id="b3", prose=(2, 3), code=(6, 8))]
     hunks = [Hunk(old_start=3, old_lines=3, new_start=3, new_lines=0)]
     assert [b.code for b in B.shift_ranges(blocks, hunks, "code")] == [(0, 3), (3, 3), (3, 5)]
+
+
+def test_pair_ranges_with_leading_summary():
+    prose = "# x.py\nDoes things.\n\nImports.\n\n## fetch\nFetches.\n\n## class Cache\nCaches.\n"
+    blocks = B.pair_ranges(prose, B.segment_prose(prose), B.segment_code(PY_CODE, "python"))
+    assert [b.id for b in blocks] == ["s", "b1", "b2", "b3"]
+    assert blocks[0].code == (0, 0) and blocks[0].prose == (0, 3) and blocks[1].code == (0, 6)
+    assert B.check_partition(blocks, "code", len(B.split_lines(PY_CODE))) is None
+    assert B.check_partition(blocks, "prose", len(B.split_lines(prose))) is None
+    assert B.pair_ranges(PY_PROSE, B.segment_prose(PY_PROSE), B.segment_code(PY_CODE, "python"))[0].id == "b1"
+    assert B.pair_ranges("# only summary\n", [(0, 1)], B.segment_code(PY_CODE, "python")) is None

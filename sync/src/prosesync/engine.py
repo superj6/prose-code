@@ -5,6 +5,7 @@ import hashlib
 import time
 import uuid
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any
 
 from omegaconf import DictConfig
@@ -60,15 +61,19 @@ class Engine:
         )
         import json
 
-        by_block = {p["block"]: p["prose"] for p in json.loads(result.raw)["paragraphs"]}
-        paragraphs = []
+        parsed = json.loads(result.raw)
+        by_block = {p["block"]: p["prose"] for p in parsed["paragraphs"]}
+        title = Path(code_path).name if code_path else "file"
+        summary_lines = [ln.rstrip() for ln in str(parsed.get("summary") or "").strip().split("\n") if ln.strip()]
+        paragraphs = [f"# {title}\n" + "\n".join(summary_lines)] if summary_lines else []
         for b in blocks:
             text = by_block.get(b.id) or f"(no description for {b.id})"
             lines = [ln.rstrip() for ln in text.strip().split("\n") if ln.strip()]  # no blank lines inside
             paragraphs.append("\n".join(lines))
         prose = "\n\n".join(paragraphs) + "\n"
-        prose_ranges = B.segment_prose(prose)
-        final_blocks = B.make_blocks(prose_ranges, code_ranges)
+        final_blocks = B.pair_ranges(prose, B.segment_prose(prose), code_ranges)
+        if final_blocks is None:  # should not happen: one paragraph per block was enforced above
+            raise RuntimeError("generated prose does not pair with the code blocks")
         resp = GenerateResponse(
             prose=prose, blocks=final_blocks, latency_ms=int((time.time() - t0) * 1000), model=result.model, usage=result.usage
         )
@@ -94,6 +99,12 @@ class Engine:
         )
         context = int(self.cfg.sync.context_blocks)
         core, editable = affected(blocks, hunks, changed, context)
+        ids = [b.id for b in blocks]
+        if B.SUMMARY_ID in ids:
+            # The summary has no code: never a code-side target; always refreshable on the prose side.
+            editable = [b for b in editable if b != B.SUMMARY_ID] if target == "code" else (
+                editable if B.SUMMARY_ID in editable else [B.SUMMARY_ID, *editable]
+            )
         protected: list[str] = []
         if req.other_side_dirty and other_hunks:
             # Blocks the user edited on the target side are theirs: pass 1 must not touch them.

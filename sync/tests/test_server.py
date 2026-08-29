@@ -32,7 +32,7 @@ def test_generate_sync_feedback_roundtrip(tmp_path):
         events = _events(r.read().decode())
     kinds = [k for k, _ in events]
     assert kinds[0] == "preview" and kinds[-2:] == ["edit", "done"]
-    assert events[0][1]["block"] == "b1" and events[0][1]["start"] == 0
+    assert events[0][1]["block"] == "b1" and events[0][1]["start"] == 3  # after the 3-line summary block
     assert events[-2][1]["block"] == "b1" and events[-2][1]["side"] == "prose"
     assert events[-1][1]["base_code_version"] == 9 and events[-1][1]["code"] == code
     assert client.post("/feedback", json={"sync_id": "r1", "outcome": "accepted", "dwell_s": 30}).json() == {"ok": True}
@@ -57,6 +57,6 @@ def test_align_rebuilds_or_409(tmp_path):
     client = TestClient(create_app(cfg, "mock"))
     gen = client.post("/generate", json={"code": PY_CODE, "language": "python", "code_path": "x.py"}).json()
     r = client.post("/align", json={"prose": gen["prose"], "code": PY_CODE, "language": "python"})
-    assert r.status_code == 200 and [b["id"] for b in r.json()["blocks"]] == ["b1", "b2", "b3"]
+    assert r.status_code == 200 and [b["id"] for b in r.json()["blocks"]] == ["s", "b1", "b2", "b3"]
     r = client.post("/align", json={"prose": "only one paragraph\n", "code": PY_CODE, "language": "python"})
     assert r.status_code == 409

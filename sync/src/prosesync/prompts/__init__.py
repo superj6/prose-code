@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
-from ..blocks import block_text, split_lines
+from ..blocks import SUMMARY_ID, block_text, split_lines
 from ..models import Block, Hunk, Side, other_side
 
 _HERE = Path(__file__).parent
@@ -40,6 +40,9 @@ def render_blocks(text: str, blocks: Sequence[Block], side: Side, full: Sequence
             out.append(f"[{b.id}] (collapsed: {outline(t)})")
             continue
         body = t.rstrip("\n")
+        if b.id == SUMMARY_ID and side == "code":
+            out.append(f"[{b.id}]\n(file summary: no code)")
+            continue
         out.append(f"[{b.id}]\n{body}" if body else f"[{b.id}]\n(empty)")
     return "\n\n".join(out)
 
@@ -53,7 +56,7 @@ def window_ids(blocks: Sequence[Block], editable: Sequence[str], max_full_blocks
     for i, bid in enumerate(ids):
         if bid in editable:
             keep.update(range(max(0, i - radius), min(len(ids), i + radius + 1)))
-    keep.update({0})  # the head of the file (imports/module docs) is cheap and orienting
+    keep.update({0, 1} if ids[0] == SUMMARY_ID else {0})  # summary + file head: cheap and orienting
     return [ids[i] for i in sorted(keep)]
 
 

@@ -15,6 +15,22 @@ is paired with the code for `parse_args`, so changing one only ever touches the 
 A paragraph may span several lines and may contain bullet points, but it must not contain a blank
 line (a blank line starts the next paragraph, i.e. the next block).
 
+## The summary block
+
+The prose may begin with a **summary block**: a level-1 heading naming the file (`# calc.py`) and
+one paragraph saying what the whole file is for, what it provides, and how the pieces fit. It has
+no code of its own (block id `s`). Generation always writes one; syncs refresh it only when the
+file's purpose or surface changes. Directory-level prose (`DIR.prose`, see below) is built from
+these summaries.
+
+## Directory prose
+
+Every directory can carry a `DIR.prose`: a `# dirname/` summary block plus one `## child`
+paragraph per file or subdirectory that has prose. Its "code side" is synthetic - the children's
+summary paragraphs - so the same block machinery keeps it in sync: when a file's summary changes,
+the parent paragraph follows (upward propagation); editing a child's paragraph in `DIR.prose` can
+be pushed down into that child's summary and from there into its code.
+
 ## Style
 
 - Start a paragraph with an optional heading naming the symbol: `## parse_args` or `## class Cache`.

@@ -29,6 +29,10 @@ PARAGRAPHS_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
+        "summary": {
+            "type": "string",
+            "description": "One paragraph (1-3 sentences, no blank lines) saying what the whole file is for and does",
+        },
         "paragraphs": {
             "type": "array",
             "items": {
@@ -42,7 +46,7 @@ PARAGRAPHS_SCHEMA = {
             },
         }
     },
-    "required": ["paragraphs"],
+    "required": ["summary", "paragraphs"],
 }
 
 PERTURB_SCHEMA = {

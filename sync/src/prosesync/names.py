@@ -7,7 +7,7 @@ from collections.abc import Sequence
 
 from .blocks import Range, join_lines, split_lines
 
-_HEADING_RE = re.compile(r"^\s*#{1,6}\s+(.*?)\s*$")
+_HEADING_RE = re.compile(r"^\s*#{2,6}\s+(.*?)\s*$")  # level 1 (`# file`) is the summary, not a symbol
 _NAMED_UNIT_RE = re.compile(
     r"(function|class|method|impl|struct|enum|trait|interface|type|module|namespace|protocol|lexical|variable|const)"
     r"_(definition|declaration|item|statement|spec)|decorated_definition|export_statement"

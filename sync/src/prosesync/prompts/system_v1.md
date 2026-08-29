@@ -4,6 +4,9 @@ two describe the same program again, changing as little as possible.
 
 Both files are cut into numbered blocks (`[b1]`, `[b2]`, ...). Block N of the prose describes
 block N of the code. The prose file has exactly one paragraph (no blank lines inside) per block.
+The prose may start with a summary block `[s]` (a `# <file>` heading plus one paragraph describing
+the whole file). It has no code of its own: update it only when the file's overall purpose or
+surface changes, and never emit edits to `[s]` when the target is the CODE side.
 
 Rules
 - Output block-level edits only: `replace` a block's text on the target side, or `delete` a block.

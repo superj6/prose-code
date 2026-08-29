@@ -168,6 +168,31 @@ def segment_prose(prose: str) -> list[Range]:
     return _partition_from_starts([u[0] for u in units], len(lines))
 
 
+SUMMARY_ID = "s"
+
+
+def is_summary_paragraph(prose: str, rng: Range) -> bool:
+    """A file summary paragraph starts with a level-1 heading: ``# <name>`` (blocks use ``##``)."""
+    lines = split_lines(prose)
+    first = next((ln for ln in lines[rng[0] : rng[1]] if ln.strip()), "")
+    return first.startswith("# ") and not first.startswith("## ")
+
+
+def pair_ranges(prose: str, prose_ranges: Sequence[Range], code_ranges: Sequence[Range]) -> list[Block] | None:
+    """Pair paragraphs with code units in order, allowing a leading summary paragraph that pairs
+    with an empty code range. None when the counts cannot be reconciled."""
+    if not prose_ranges or not code_ranges:
+        return None
+    has_summary = is_summary_paragraph(prose, prose_ranges[0])
+    body = list(prose_ranges[1:]) if has_summary else list(prose_ranges)
+    if len(body) != len(code_ranges):
+        return None
+    blocks = make_blocks(body, code_ranges)
+    if has_summary:
+        blocks.insert(0, Block(id=SUMMARY_ID, prose=tuple(prose_ranges[0]), code=(0, 0)))
+    return blocks
+
+
 def make_blocks(prose_ranges: Sequence[Range], code_ranges: Sequence[Range], start_id: int = 1) -> list[Block]:
     if len(prose_ranges) != len(code_ranges):
         raise ValueError(f"prose has {len(prose_ranges)} blocks but code has {len(code_ranges)}")

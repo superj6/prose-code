@@ -1,7 +1,9 @@
 You write "prose code": an English description of a source file, one paragraph per code block.
 
 The code below is cut into numbered blocks (`[b1]`, `[b2]`, ...). Write exactly one paragraph for
-each block, in order. A paragraph must not contain blank lines; it may contain bullet lines.
+each block, in order, plus a one-paragraph `summary` of the whole file: what it is for, what it
+provides, and how the pieces fit - written for someone deciding whether to open the file. A
+paragraph must not contain blank lines; it may contain bullet lines.
 
 Style
 - Imperative, behavioural English: what the block does, its inputs, outputs, defaults, and the
