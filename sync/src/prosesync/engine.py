@@ -49,13 +49,15 @@ class Engine:
         self.prompt_version = str(cfg.sync.prompt_version)
 
     # ------------------------------------------------------------------ generate
-    async def generate(self, code: str, language: str, code_path: str = "", model: str | None = None) -> GenerateResponse:
+    async def generate(
+        self, code: str, language: str, code_path: str = "", model: str | None = None, kind: str = "generate", title: str | None = None
+    ) -> GenerateResponse:
         t0 = time.time()
         code_ranges = B.segment_code(code, language, self.min_block_lines)
         if not code_ranges:
             return GenerateResponse(prose="", blocks=[], model=self.backend.name)
         blocks = B.make_blocks([(i, i + 1) for i in range(len(code_ranges))], code_ranges)
-        messages = build_generate_messages(language=language, code=code, blocks=blocks, version=self.prompt_version)
+        messages = build_generate_messages(language=language, code=code, blocks=blocks, version=self.prompt_version, kind=kind)
         result = await self.backend.complete_json(
             messages, PARAGRAPHS_SCHEMA, "paragraphs", model=model, cache_key=f"prosesync:{pair_id_for(code_path)}"
         )
@@ -63,7 +65,7 @@ class Engine:
 
         parsed = json.loads(result.raw)
         by_block = {p["block"]: p["prose"] for p in parsed["paragraphs"]}
-        title = Path(code_path).name if code_path else "file"
+        title = title or (Path(code_path).name if code_path else "file")
         summary_lines = [ln.rstrip() for ln in str(parsed.get("summary") or "").strip().split("\n") if ln.strip()]
         paragraphs = [f"# {title}\n" + "\n".join(summary_lines)] if summary_lines else []
         for b in blocks:
@@ -100,6 +102,8 @@ class Engine:
         context = int(self.cfg.sync.context_blocks)
         core, editable = affected(blocks, hunks, changed, context)
         ids = [b.id for b in blocks]
+        if req.options.broad:
+            editable = list(ids)
         if B.SUMMARY_ID in ids:
             # The summary has no code: never a code-side target; always refreshable on the prose side.
             editable = [b for b in editable if b != B.SUMMARY_ID] if target == "code" else (

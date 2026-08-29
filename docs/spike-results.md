@@ -75,3 +75,19 @@ the extension applies edits per side.
 Latency: prose→code cases that generate new code are the slow tail (4–8 s); code→prose sits at
 1.5–3 s. `cache_hit` is 0 here because every item is a distinct pair; repeated syncs of one pair
 hit ~99 % (see README, "Latency knobs").
+
+# Hierarchical prose — 2026-08-28
+
+`prosesync gen examples/` (3 files + `DIR.prose`, 4 model calls). Then:
+
+- **Upward**: added a `calc_all(lines)` helper to `calc.py` → file sync refreshed the `# calc.py`
+  summary and the `calc` paragraph (split into `calc` / `calc_all`), and `propagate_up` re-synced
+  `examples/DIR.prose` (2 edits: the `## calc.py` paragraph and the directory summary). 3.4 s + 1 call.
+- **Downward**: appended "it also exports a `sleep(ms)` helper…" to the `## util.ts` paragraph of
+  `DIR.prose` → `push-down` synced the directory pair (1 edit to the synthetic child-summary doc),
+  pushed the new summary into `util.ts.prose`, ran a broad prose→code sync that added
+  `export function sleep(ms)` to `util.ts` (tsc clean), then the follow-up code→prose pass added a
+  `## sleep` paragraph. 10.9 s total, 4 model calls.
+- One transient `ReadTimeout` (60 s) on the first attempt exposed that the directory snapshot was
+  saved before the children succeeded, which would have swallowed the retry; fixed (snapshot saved
+  only after all pushes succeed) and the request timeout raised to 120 s.

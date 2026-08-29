@@ -29,3 +29,9 @@ export type SyncEvent =
   | { event: "edit"; data: LineEdit }
   | { event: "done"; data: SyncResponse }
   | { event: "error"; data: { message: string; needs_regenerate: boolean } };
+export interface TreeResult {
+  generated: string[];
+  synced: { path: string; edits: number }[];
+  unchanged: string[];
+  errors: { path: string; error: string }[];
+}

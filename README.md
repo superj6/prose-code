@@ -77,6 +77,24 @@ is the training signal for the custom model.
   cancels in-flight requests when you keep typing, and drops a response if you edited the target
   side while it was in flight.
 
+## Hierarchical prose
+
+Every file's prose starts with a `# file` summary block; every directory can have a `DIR.prose`
+with a `# dir/` summary and one `## child` paragraph per file or subdirectory. The directory pair's
+"code side" is synthetic — the children's summaries — so the same block machinery keeps it in sync:
+
+```sh
+.venv/bin/prosesync gen src/                 # prose for every file under src/ + DIR.prose per directory (deepest first)
+.venv/bin/prosesync sync src/calc.py --changed code   # ...then ancestors whose child paragraph changed are re-synced (upward)
+.venv/bin/prosesync push-down src/           # you edited src/DIR.prose: update the children's summaries, then their code,
+                                             # then the paragraphs describing the changed code (downward, depth-limited)
+```
+
+In VS Code: **Prose Code: Open Directory Prose** (generates if missing), upward propagation runs
+after every file sync (`prosecode.propagateUp`), and saving a `DIR.prose` offers to push down
+(`prosecode.pushDownOnSave`: ask | always | never). Propagation stops at the first ancestor whose
+own summary did not change, so a local edit costs one extra model call, not one per level.
+
 ## Latency knobs
 
 All in `configs/base.yaml` (`sync.*`), overridable with `--override sync.key=value`:

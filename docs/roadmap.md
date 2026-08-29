@@ -17,7 +17,7 @@ Decisions: language-agnostic target code; VS Code extension as the interface; Op
 | **4 — Custom model** (scaffolding done) | LoRA SFT trainer, model loader, prepare/merge, train configs, Modal jobs `sft`/`serve` ✅ (CPU smoke on Qwen3-0.6B ✅, A100 smoke pending); **todo**: real run once the corpus exists, DPO stage with `sync_reward`, eval of the served model vs `gpt-5.6-luna` | Checkpoints + harness table vs `gpt-5.6-luna` on `test.jsonl`. |
 | **5 — Switchover** | vLLM OpenAI-compatible serving on Modal, `prosecode.endpoint`/`sync.base_url` A/B | Schema validity ≥ 99 %, syntax validity and collateral ≤ OpenAI's, round-trip within 5 pts, p50 < 1.5 s served, revert rate not worse over ≥ 200 real syncs. |
 
-## Hierarchical prose (Phase 2.5 — proposed)
+## Hierarchical prose (Phase 2.5 — implemented 2026-08-28)
 
 Idea: keep a prose file at **every directory level**, all in sync. `src/README.prose` (or
 `src/.prose/DIR.prose`) has one paragraph per child — each file's paragraph is a one-paragraph
@@ -41,10 +41,11 @@ Design that reuses the block machinery unchanged:
 - File summaries need a stable place: add an optional leading `# summary` paragraph to the file
   prose (block `b0`, paired with an empty code range) so the directory level has something
   well-defined to read and write. The generator writes it; the grammar doc documents it.
-- New pieces: `sync/src/prosesync/tree.py` (synthetic parent documents, dependency graph,
-  coalescing scheduler), a `prosecode.openDirectoryProse` command, and a `--recursive` mode for
-  `prosesync gen`. Eval: a "propagation consistency" item type (edit a file, check the parent
-  paragraph changes and nothing else does).
+- Shipped: `sync/src/prosesync/tree.py` (synthetic parent documents, `generate_tree`,
+  `propagate_up`, `propagate_down` with a follow-up paragraph refresh), `/tree/*` endpoints,
+  `prosesync gen DIR` / `push-down`, extension commands **Open Directory Prose** / **Push Down**
+  and propagate-up after each sync. Still to do: a coalescing scheduler for bursts of edits across
+  files, and a "propagation consistency" eval item type.
 
 Risks: cascades (an edit at depth 3 touching 3 ancestors ≈ 4 model calls — acceptable at ~2 s each
 with cached prefixes, but never synchronous with typing); summaries drifting from their files if a

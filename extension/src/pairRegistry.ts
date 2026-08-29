@@ -131,11 +131,54 @@ export class PairRegistry implements vscode.Disposable {
         verify: s.verify,
         feedbackWindowS: s.feedbackWindowS,
         onSnapshot: (snap) => saveSnapshot(codePath, snap),
+        onSynced: () => void this.propagateUp(codePath),
         log: (line) => this.out.appendLine(line),
       },
     );
     this.pairs.set(codePath, { manager, code: codeDoc, prose: proseDoc });
     this.out.appendLine(`[pair] open ${codePath} <-> ${prosePath}`);
+  }
+
+  /** After a file sync, refresh ancestor DIR.prose files (server writes them; open editors reload). */
+  async propagateUp(codePath: string): Promise<void> {
+    const s = this.settings();
+    if (!s.propagateUp) return;
+    try {
+      const r = await this.client.tree("propagate_up", codePath, s.sidecarDir);
+      for (const x of r.synced) this.out.appendLine(`[tree] ${x.path}: ${x.edits} edit(s)`);
+      for (const e of r.errors) this.out.appendLine(`[tree] error ${e.path}: ${e.error}`);
+      if (r.synced.length) this.status.set("idle", `updated ${r.synced.length} DIR.prose`);
+    } catch (e) {
+      this.out.appendLine(`[tree] propagate_up failed: ${(e as Error).message}`);
+    }
+  }
+
+  async openDirectoryProse(dir: string): Promise<void> {
+    const s = this.settings();
+    const dirProse = path.join(dir, "DIR.prose");
+    if (!fs.existsSync(dirProse)) {
+      await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: `Prose Code: generating prose for ${path.basename(dir)}/…` },
+        async () => {
+          const r = await this.client.tree("generate", dir, s.sidecarDir);
+          for (const g of r.generated) this.out.appendLine(`[tree] wrote ${g}`);
+          for (const e of r.errors) this.out.appendLine(`[tree] error ${e.path}: ${e.error}`);
+        },
+      );
+    }
+    const doc = await vscode.workspace.openTextDocument(dirProse);
+    await vscode.window.showTextDocument(doc, { preview: false });
+  }
+
+  async pushDown(dir: string): Promise<void> {
+    const s = this.settings();
+    const r = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: `Prose Code: pushing ${path.basename(dir)}/DIR.prose down…` },
+      () => this.client.tree("push_down", dir, s.sidecarDir),
+    );
+    for (const x of r.synced) this.out.appendLine(`[tree] ${x.path}: ${x.edits} edit(s)`);
+    for (const e of r.errors) this.out.appendLine(`[tree] error ${e.path}: ${e.error}`);
+    void vscode.window.showInformationMessage(`Prose Code: pushed down — ${r.synced.length} file(s) updated${r.errors.length ? `, ${r.errors.length} error(s) (see log)` : ""}`);
   }
 
   onDocumentClosed(doc: vscode.TextDocument): void {

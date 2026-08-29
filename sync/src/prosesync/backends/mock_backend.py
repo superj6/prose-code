@@ -13,7 +13,7 @@ from typing import Any
 
 from ..models import BackendResult
 
-_AFFECTED_LIST_RE = re.compile(r"^Affected blocks: (.*?)\.", re.MULTILINE)
+_AFFECTED_LIST_RE = re.compile(r"^Affected blocks: (.*?)\. Editable blocks: (.*?)\.", re.MULTILINE)
 _TARGET_RE = re.compile(r"Produce edits to the (PROSE|CODE) side")
 _BLOCK_RE = re.compile(r"^\[(b\d+)\]\n(.*?)(?=\n\n\[b\d+|\n\n|\Z)", re.DOTALL | re.MULTILINE)
 
@@ -47,13 +47,26 @@ class MockBackend:
             target = _TARGET_RE.search(user).group(1).lower()
             source_section = user.split("=== CODE ===" if target == "prose" else "=== PROSE ===", 1)[1]
             source_section = source_section.split("\n===", 1)[0]  # stop at the next section header
-            listed = _AFFECTED_LIST_RE.search(user).group(1)
-            affected = [b.strip() for b in listed.split(",") if b.strip().startswith("b")]
+            m = _AFFECTED_LIST_RE.search(user)
+            affected = [b.strip() for b in m.group(1).split(",") if b.strip()]
+            editable = [b.strip() for b in m.group(2).split(",") if b.strip()]
+            if target == "code" and affected == ["s"]:
+                # summary-driven sync: a real model edits the relevant code blocks; the mock edits the first one
+                affected = [b for b in editable if b != "s"][:1]
+            affected = [b for b in affected if b in editable and b != "(none)"]
             bodies = dict(_BLOCK_RE.findall(source_section))
+            prosetree = "Language: prosetree" in user
+            if prosetree and target == "code":
+                # directory pair: the "code" is child summaries; keep the `## name` heading intact
+                code_section = user.split("=== CODE ===", 1)[1].split("\n===", 1)[0]
+                code_bodies = dict(_BLOCK_RE.findall(code_section))
             edits = []
             for bid in affected:
                 body = bodies.get(bid, "")
                 first = next((ln.strip() for ln in body.split("\n") if ln.strip()), "")
+                if prosetree and target == "code":
+                    edits.append({"op": "replace", "block": bid, "text": code_bodies.get(bid, "").rstrip() + " (updated)", "reason": "mock update"})
+                    continue
                 if target == "prose":
                     text = f"Block {bid}: describes `{first}` (updated)"
                 else:

@@ -94,6 +94,7 @@ def build_sync_messages(
     target = other_side(changed)
     stable = [
         f"Language: {language}",
+        *(["(prosetree: the CODE side is the list of child summaries of a directory, one `## name` paragraph per child.)"] if language == "prosetree" else []),
         "",
         "=== CODE ===",
         render_blocks(code, blocks, "code", full),
@@ -129,7 +130,9 @@ def build_sync_messages(
     ]
 
 
-def build_generate_messages(*, language: str, code: str, blocks: Sequence[Block], version: str = "v1") -> list[dict[str, str]]:
+def build_generate_messages(
+    *, language: str, code: str, blocks: Sequence[Block], version: str = "v1", kind: str = "generate"
+) -> list[dict[str, str]]:
     user = [
         f"Language: {language}",
         f"Write one paragraph for each of the {len(blocks)} blocks, in order.",
@@ -140,6 +143,6 @@ def build_generate_messages(*, language: str, code: str, blocks: Sequence[Block]
         'Return JSON: {"paragraphs": [{"block": "b1", "prose": "..."}, ...]} with exactly one entry per block.',
     ]
     return [
-        {"role": "system", "content": system_prompt("generate", version)},
+        {"role": "system", "content": system_prompt(kind, version)},
         {"role": "user", "content": "\n".join(user)},
     ]

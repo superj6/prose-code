@@ -6,6 +6,9 @@
                                            or event "error" {"message", "needs_regenerate"}
     POST /align    {prose, code, language} -> {"blocks": [...]} or 409 when the prose is stale (regenerate)
     POST /feedback Feedback             -> {"ok": true}
+    POST /tree/generate {root}          -> generate prose for every file under root + DIR.prose per directory
+    POST /tree/propagate_up {code_path} -> re-sync ancestor DIR.prose files after a file changed
+    POST /tree/push_down {dir}          -> apply edits made in dir/DIR.prose to its children
 
 Cancellation: the extension aborts the HTTP request; the streaming generator is closed and the
 backend stream with it. The port is printed as ``PROSESYNC_PORT=<n>`` on stdout at startup.
@@ -40,6 +43,12 @@ class AlignBody(SyncRequest.__bases__[0]):  # BaseModel
     prose: str
     code: str
     language: str
+
+
+class TreeBody(SyncRequest.__bases__[0]):  # BaseModel
+    path: str
+    sidecar_dir: str = ""
+    overwrite: bool = False
 
 
 def _sse(event: str, data: Any) -> str:
@@ -103,6 +112,38 @@ def create_app(cfg: DictConfig, backend_name: str | None = None) -> FastAPI:
         if blocks is None:
             return JSONResponse({"error": "prose and code cannot be paired; regenerate"}, status_code=409)
         return JSONResponse({"blocks": [b.model_dump() for b in blocks]})
+
+    def _tree_json(result) -> dict[str, Any]:
+        return {
+            "generated": [str(p) for p in result.generated],
+            "synced": [{"path": str(p), "edits": n} for p, n in result.synced],
+            "unchanged": [str(p) for p in result.unchanged],
+            "errors": [{"path": str(p), "error": e} for p, e in result.errors],
+        }
+
+    @app.post("/tree/generate")
+    async def tree_generate(body: TreeBody) -> dict[str, Any]:
+        from pathlib import Path
+
+        from .tree import generate_tree
+
+        return _tree_json(await generate_tree(engine, Path(body.path), body.sidecar_dir, overwrite=body.overwrite))
+
+    @app.post("/tree/propagate_up")
+    async def tree_propagate_up(body: TreeBody) -> dict[str, Any]:
+        from pathlib import Path
+
+        from .tree import propagate_up
+
+        return _tree_json(await propagate_up(engine, Path(body.path), body.sidecar_dir))
+
+    @app.post("/tree/push_down")
+    async def tree_push_down(body: TreeBody) -> dict[str, Any]:
+        from pathlib import Path
+
+        from .tree import propagate_down
+
+        return _tree_json(await propagate_down(engine, Path(body.path), body.sidecar_dir))
 
     @app.post("/feedback")
     async def feedback(fb: Feedback) -> JSONResponse:

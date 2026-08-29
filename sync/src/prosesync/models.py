@@ -103,6 +103,7 @@ class SyncOptions(BaseModel):
     verify: bool | None = None
     model: str | None = None
     max_edits: int | None = None
+    broad: bool = False  # every block is editable (summary-driven / push-down syncs)
 
 
 class SyncRequest(BaseModel):

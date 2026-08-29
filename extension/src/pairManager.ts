@@ -20,6 +20,7 @@ export interface ManagerOptions {
   maxDiscards?: number;
   timer?: Timer;
   onSnapshot?: (s: Snapshot) => void;
+  onSynced?: (resp: SyncResponse) => void;
   log?: (line: string) => void;
 }
 
@@ -270,6 +271,7 @@ export class PairManager {
     }
     this.ui.setStatus("idle", `${applied.length} edit(s) in ${resp.latency_ms} ms`);
     if (applied.length) this.trackFeedback(syncId, applied, originals);
+    if (applied.length) this.opts.onSynced?.(resp);
   }
 
   private trackFeedback(syncId: string, applied: LineEdit[], originals: string[]): void {

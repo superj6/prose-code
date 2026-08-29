@@ -2,7 +2,7 @@ import { ChildProcess, spawn } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
-import { Block, Feedback, GenerateResponse, SyncEvent, SyncRequest } from "./protocol";
+import { Block, Feedback, GenerateResponse, SyncEvent, SyncRequest, TreeResult } from "./protocol";
 import { Settings } from "./settings";
 
 /** Talks to the prosesync HTTP server; spawns it when endpoint === "auto". */
@@ -118,6 +118,16 @@ export class SyncClient implements vscode.Disposable {
         if (ev) await onEvent(ev);
       }
     }
+  }
+
+  async tree(op: "generate" | "propagate_up" | "push_down", path: string, sidecarDir: string, overwrite = false): Promise<TreeResult> {
+    const r = await fetch(`${await this.url()}/tree/${op}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path, sidecar_dir: sidecarDir, overwrite }),
+    });
+    if (!r.ok) throw new Error(`tree ${op} failed: ${r.status} ${await r.text()}`);
+    return (await r.json()) as TreeResult;
   }
 
   async feedback(fb: Feedback): Promise<void> {

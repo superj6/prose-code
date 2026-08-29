@@ -19,6 +19,9 @@ _EXT_TO_LANGUAGE = {
 }
 
 
+LANGUAGE_SUFFIXES = set(_EXT_TO_LANGUAGE)
+
+
 def language_for(path: Path) -> str:
     return _EXT_TO_LANGUAGE.get(path.suffix.lower(), path.suffix.lstrip(".").lower() or "text")
 

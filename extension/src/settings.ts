@@ -12,6 +12,8 @@ export interface Settings {
   logInteractions: boolean;
   sidecarDir: string;
   feedbackWindowS: number;
+  propagateUp: boolean;
+  pushDownOnSave: "ask" | "always" | "never";
 }
 
 export function getSettings(): Settings {
@@ -28,5 +30,7 @@ export function getSettings(): Settings {
     logInteractions: c.get("logInteractions", true),
     sidecarDir: c.get("sidecarDir", ""),
     feedbackWindowS: c.get("feedbackWindowS", 30),
+    propagateUp: c.get("propagateUp", true),
+    pushDownOnSave: c.get("pushDownOnSave", "ask"),
   };
 }

@@ -1,3 +1,4 @@
+import * as path from "path";
 import * as vscode from "vscode";
 import { Decorations } from "./decorations";
 import { PairRegistry } from "./pairRegistry";
@@ -55,6 +56,24 @@ export function activate(context: vscode.ExtensionContext): void {
       void vscode.window.showInformationMessage(`Prose Code: auto sync ${on ? "on" : "off"}`);
     }),
     vscode.commands.registerCommand("prosecode.showLog", () => out.show()),
+    vscode.commands.registerCommand(
+      "prosecode.openDirectoryProse",
+      withError(async () => {
+        const doc = vscode.window.activeTextEditor?.document;
+        const dir = doc && !doc.isUntitled ? path.dirname(doc.uri.fsPath) : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!dir) throw new Error("open a file or a workspace folder first");
+        await registry.openDirectoryProse(dir);
+      }),
+    ),
+    vscode.commands.registerCommand(
+      "prosecode.pushDown",
+      withError(async () => {
+        const doc = vscode.window.activeTextEditor?.document;
+        if (!doc || path.basename(doc.uri.fsPath) !== "DIR.prose") throw new Error("run this from a DIR.prose file");
+        if (doc.isDirty) await doc.save();
+        await registry.pushDown(path.dirname(doc.uri.fsPath));
+      }),
+    ),
     vscode.workspace.onDidChangeTextDocument((e) => {
       if (e.contentChanges.length === 0) return;
       const found = registry.find(e.document);
@@ -63,9 +82,20 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.workspace.onDidSaveTextDocument((doc) => {
       const found = registry.find(doc);
       if (found && getSettings().syncOnSave) found.manager.onSave(found.side);
+      if (path.basename(doc.uri.fsPath) === "DIR.prose") void maybePushDown(doc);
     }),
     vscode.workspace.onDidCloseTextDocument((doc) => registry.onDocumentClosed(doc)),
   );
+}
+
+async function maybePushDown(doc: vscode.TextDocument): Promise<void> {
+  const mode = getSettings().pushDownOnSave;
+  if (mode === "never") return;
+  if (mode === "ask") {
+    const pick = await vscode.window.showInformationMessage("Push this directory prose down into its children?", "Push down", "Not now");
+    if (pick !== "Push down") return;
+  }
+  await vscode.commands.executeCommand("prosecode.pushDown");
 }
 
 export function deactivate(): void {
