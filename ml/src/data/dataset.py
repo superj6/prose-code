@@ -35,13 +35,13 @@ def render(rec: dict[str, Any], cfg) -> dict[str, Any] | None:
     prose_now = rec.get("prose_now", rec["prose"])
     code_now = rec.get("code_now", rec["code"])
     try:
-        blocks, hunks, other_hunks = realign(base, prose_now, code_now, rec["language"], changed, bool(rec.get("other_side_dirty")), int(cfg.segment.min_block_lines))
+        blocks, hunks, other_hunks, base_blocks = realign(base, prose_now, code_now, rec["language"], changed, bool(rec.get("other_side_dirty")), int(cfg.segment.min_block_lines))
     except Exception:  # noqa: BLE001 - unrenderable record is skipped, reported by stats
         return None
-    core, editable = affected(blocks, hunks, changed, int(cfg.sync.context_blocks))
+    core, editable = affected(base_blocks, hunks, changed, int(cfg.sync.context_blocks))
     protected: list[str] = []
     if rec.get("other_side_dirty") and other_hunks:
-        protected, _ = affected(blocks, other_hunks, target, 0)
+        protected, _ = affected(base_blocks, other_hunks, target, 0)
         editable = [b for b in editable if b not in protected]
     full = window_ids(blocks, editable, int(cfg.window.max_full_blocks), int(cfg.window.radius))
     messages = build_sync_messages(

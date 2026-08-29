@@ -36,6 +36,32 @@ def map_path(code_path: Path) -> Path:
     return code_path.parent / ".prose" / (code_path.name + ".map.json")
 
 
+def git_head_text(path: Path) -> str | None:
+    """The committed (HEAD) content of ``path``, or None when not in git / untracked / no git.
+
+    The block maps live in the gitignored .prose/ directory, so on a fresh clone the last synced
+    state of a checked-in pair is best approximated by what was committed."""
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(path.parent), "show", f"HEAD:./{path.name}"], capture_output=True, text=True, timeout=10, check=False
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return out.stdout if out.returncode == 0 else None
+
+
+def base_texts(code_path: Path, prose_path: Path) -> tuple[str, str, str]:
+    """(prose, code, source) to rebuild a snapshot from when the map is missing: the committed
+    versions when available, else the working copies ("git" | "worktree")."""
+    prose_head = git_head_text(prose_path)
+    code_head = git_head_text(code_path)
+    if prose_head is not None and code_head is not None:
+        return prose_head, code_head, "git"
+    return prose_path.read_text(), code_path.read_text(), "worktree"
+
+
 def save_snapshot(code_path: Path, snap: Snapshot) -> None:
     p = map_path(code_path)
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -49,4 +75,4 @@ def load_snapshot(code_path: Path) -> Snapshot | None:
     data = json.loads(p.read_text())
     if data.get("version") != MAP_VERSION:
         return None
-    return Snapshot(prose=data["prose"], code=data["code"], blocks=data["blocks"])
+    return Snapshot(prose=data["prose"], code=data["code"], blocks=data["blocks"], code_blocks=data.get("code_blocks", []))

@@ -83,7 +83,29 @@ export function activate(context: vscode.ExtensionContext): void {
       const found = registry.find(doc);
       if (found && getSettings().syncOnSave) found.manager.onSave(found.side);
       if (path.basename(doc.uri.fsPath) === "DIR.prose") void maybePushDown(doc);
+      if (!found && doc.uri.scheme === "file" && getSettings().autoGenerate !== "off") {
+        if (doc.languageId === "prose") void registry.ensureCode(doc.uri.fsPath);
+        else void registry.ensureProse(doc.uri.fsPath, "saved");
+      }
     }),
+    vscode.workspace.onDidCreateFiles((e) => {
+      if (getSettings().autoGenerate !== "onCreate") return;
+      for (const f of e.files) void registry.ensureProse(f.fsPath, "created");
+    }),
+    vscode.workspace.onDidDeleteFiles((e) => registry.onFilesDeleted(e.files.map((f) => f.fsPath))),
+    vscode.workspace.onDidRenameFiles((e) => registry.onFilesRenamed(e.files.map((f) => ({ oldPath: f.oldUri.fsPath, newPath: f.newUri.fsPath })))),
+    vscode.commands.registerCommand(
+      "prosecode.initFolder",
+      withError(async () => {
+        const doc = vscode.window.activeTextEditor?.document;
+        const fallback = doc && !doc.isUntitled ? path.dirname(doc.uri.fsPath) : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        const picked = await vscode.window.showOpenDialog({ canSelectFiles: false, canSelectFolders: true, canSelectMany: false, defaultUri: fallback ? vscode.Uri.file(fallback) : undefined, openLabel: "Initialize prose here" });
+        const dir = picked?.[0]?.fsPath;
+        if (!dir) return;
+        const overwrite = (await vscode.window.showQuickPick(["Keep existing prose (only new files)", "Regenerate everything"], { placeHolder: `Initialize prose under ${dir}` })) === "Regenerate everything";
+        await registry.initFolder(dir, overwrite);
+      }),
+    ),
     vscode.workspace.onDidCloseTextDocument((doc) => registry.onDocumentClosed(doc)),
   );
 }

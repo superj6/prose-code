@@ -118,3 +118,27 @@ def test_both_dirty_runs_two_passes_and_keeps_user_text(engine):
     assert "return self.d.get(k, None)" in resp.code  # the user's code edit survived pass 2
     assert any(w.startswith("pass 2 (prose -> code)") for w in resp.warnings)
     assert not any("rejected" in w for w in resp.warnings)
+
+
+def test_generate_code_from_prose(engine):
+    prose = "# new.py\nA helper module.\n\nImport `os`.\n\n## greet\nReturn a greeting for `name`.\n"
+    resp = asyncio.run(engine.generate_code(prose, "python", "new.py"))
+    assert [b.id for b in resp.blocks] == ["s", "b1", "b2"]
+    assert resp.code == "# Import `os`.\npass\n\n\n# ## greet\npass\n"
+    assert B.check_partition(resp.blocks, "code", len(B.split_lines(resp.code))) is None
+    assert B.check_partition(resp.blocks, "prose", len(B.split_lines(prose))) is None
+    # the resulting pair round-trips through the normal sync path
+    req = SyncRequest(
+        request_id="r6", pair=Pair(pair_id="p", language="python", code_path="new.py", prose=prose.replace("## greet", "## greet_loudly"), code=resp.code),
+        base=Snapshot(prose=prose, code=resp.code, blocks=resp.blocks), change=Change(side="prose"),
+    )
+    out = asyncio.run(engine.sync(req))
+    assert out.line_edits and out.line_edits[0].block == "b2"
+
+
+def test_create_from_summary_only_prose(engine):
+    prose, code, blocks = asyncio.run(engine.create_from_prose("# c.py\nGreets people.\n", "python", "c.py"))
+    assert code.startswith("# ") and code.strip()
+    assert prose.startswith("# c.py\nGreets people.\n\n") and blocks[0].id == "s" and len(blocks) >= 2
+    assert B.check_partition(blocks, "prose", len(B.split_lines(prose))) is None
+    assert B.check_partition(blocks, "code", len(B.split_lines(code))) is None

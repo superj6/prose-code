@@ -2,6 +2,8 @@
 
     GET  /health                       -> {"ok": true, "backend": "openai", "model": "..."}
     POST /generate {code, language, code_path} -> GenerateResponse
+    POST /generate_code {prose, language, code_path} -> GenerateCodeResponse   (the inverse: prose blocks -> code)
+    POST /create {prose, language, code_path}  -> {prose, code, blocks}  (new prose file, summary-only allowed)
     POST /sync     SyncRequest          -> SSE stream: "preview" (Preview)* / "edit" (LineEdit) ... "done" (SyncResponse)
                                            or event "error" {"message", "needs_regenerate"}
     POST /align    {prose, code, language} -> {"blocks": [...]} or 409 when the prose is stale (regenerate)
@@ -29,7 +31,7 @@ from omegaconf import DictConfig
 from .align import NeedsRegenerate, resegment
 from .backends import get_backend
 from .engine import Engine
-from .models import Feedback, GenerateResponse, LineEdit, Preview, SyncRequest
+from .models import Feedback, GenerateCodeResponse, GenerateResponse, LineEdit, Preview, SyncRequest
 
 
 class GenerateBody(SyncRequest.__bases__[0]):  # BaseModel
@@ -43,6 +45,15 @@ class AlignBody(SyncRequest.__bases__[0]):  # BaseModel
     prose: str
     code: str
     language: str
+    code_path: str = ""       # when given, the committed versions (git HEAD) are preferred as the base
+    prose_path: str = ""
+
+
+class GenerateCodeBody(SyncRequest.__bases__[0]):  # BaseModel
+    prose: str
+    language: str
+    code_path: str = ""
+    model: str | None = None
 
 
 class TreeBody(SyncRequest.__bases__[0]):  # BaseModel
@@ -69,6 +80,16 @@ def create_app(cfg: DictConfig, backend_name: str | None = None) -> FastAPI:
     @app.post("/generate")
     async def generate(body: GenerateBody) -> GenerateResponse:
         return await engine.generate(body.code, body.language, body.code_path, model=body.model)
+
+    @app.post("/generate_code")
+    async def generate_code(body: GenerateCodeBody) -> GenerateCodeResponse:
+        return await engine.generate_code(body.prose, body.language, body.code_path, model=body.model)
+
+    @app.post("/create")
+    async def create(body: GenerateCodeBody) -> dict[str, Any]:
+        """New prose file (possibly summary-only) -> code + normalised prose + block map."""
+        prose, code, blocks = await engine.create_from_prose(body.prose, body.language, body.code_path)
+        return {"prose": prose, "code": code, "blocks": [b.model_dump() for b in blocks]}
 
     @app.post("/sync")
     async def sync(req: SyncRequest, request: Request) -> StreamingResponse:
@@ -107,11 +128,24 @@ def create_app(cfg: DictConfig, backend_name: str | None = None) -> FastAPI:
 
     @app.post("/align")
     async def align(body: AlignBody) -> JSONResponse:
-        """Rebuild the block map for an existing prose/code pair without calling the model."""
-        blocks = resegment(body.prose, body.code, body.language, engine.min_block_lines)
+        """Rebuild the block map for an existing prose/code pair without calling the model. Returns
+        the base texts the map belongs to (committed versions when the paths are in git)."""
+        from pathlib import Path
+
+        from . import store
+
+        prose, code, source = body.prose, body.code, "request"
+        if body.code_path and body.prose_path and Path(body.code_path).exists() and Path(body.prose_path).exists():
+            prose, code, source = store.base_texts(Path(body.code_path), Path(body.prose_path))
+            if source != "git":
+                prose, code = body.prose, body.code
+        blocks = resegment(prose, code, body.language, engine.min_block_lines)
+        if blocks is None and source == "git":  # committed pair stale? try the working copy
+            prose, code, source = body.prose, body.code, "request"
+            blocks = resegment(prose, code, body.language, engine.min_block_lines)
         if blocks is None:
             return JSONResponse({"error": "prose and code cannot be paired; regenerate"}, status_code=409)
-        return JSONResponse({"blocks": [b.model_dump() for b in blocks]})
+        return JSONResponse({"blocks": [b.model_dump() for b in blocks], "prose": prose, "code": code, "source": source})
 
     def _tree_json(result) -> dict[str, Any]:
         return {

@@ -193,19 +193,35 @@ def pair_ranges(prose: str, prose_ranges: Sequence[Range], code_ranges: Sequence
     return blocks
 
 
-def make_blocks(prose_ranges: Sequence[Range], code_ranges: Sequence[Range], start_id: int = 1) -> list[Block]:
+def make_blocks(prose_ranges: Sequence[Range], code_ranges: Sequence[Range], start_id: int = 1, prefix: str = "b") -> list[Block]:
     if len(prose_ranges) != len(code_ranges):
         raise ValueError(f"prose has {len(prose_ranges)} blocks but code has {len(code_ranges)}")
     return [
-        Block(id=f"b{start_id + i}", prose=tuple(p), code=tuple(c))
+        Block(id=f"{prefix}{start_id + i}", prose=tuple(p), code=tuple(c))
         for i, (p, c) in enumerate(zip(prose_ranges, code_ranges))
     ]
 
 
-def next_block_id(blocks: Sequence[Block]) -> int:
+def side_partition(text: str, side: Side, language: str = "prosetree", prefix: str = "p") -> list[Block]:
+    """Free mode: a partition of ONE side (paragraphs for prose, units for code); the other side's
+    ranges are empty. A leading ``# summary`` paragraph on the prose side gets id ``s``."""
+    ranges = segment_prose(text) if side == "prose" else segment_code(text, language)
+    blocks: list[Block] = []
+    n = 1
+    for i, rng in enumerate(ranges):
+        if side == "prose" and i == 0 and is_summary_paragraph(text, rng):
+            blocks.append(Block(id=SUMMARY_ID, prose=tuple(rng), code=(0, 0)))
+            continue
+        bid = f"{prefix}{n}"
+        n += 1
+        blocks.append(Block(id=bid, prose=tuple(rng), code=(0, 0)) if side == "prose" else Block(id=bid, prose=(0, 0), code=tuple(rng)))
+    return blocks
+
+
+def next_block_id(blocks: Sequence[Block], prefix: str = "b") -> int:
     best = 0
     for b in blocks:
-        m = re.fullmatch(r"b(\d+)", b.id)
+        m = re.fullmatch(re.escape(prefix) + r"(\d+)", b.id)
         if m:
             best = max(best, int(m.group(1)))
     return best + 1

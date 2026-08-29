@@ -59,3 +59,34 @@ PERTURB_SCHEMA = {
     },
     "required": ["block", "text", "label"],
 }
+
+CODE_BLOCKS_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "blocks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "block": {"type": "string"},
+                    "code": {"type": "string", "description": "Source code for this block (may be empty for the summary)"},
+                },
+                "required": ["block", "code"],
+            },
+        }
+    },
+    "required": ["blocks"],
+}
+
+
+FREE_PROSE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "summary": {"type": "string", "description": "One paragraph for the directory as a whole"},
+        "paragraphs": {"type": "array", "items": {"type": "string", "description": "One paragraph, no blank lines"}},
+    },
+    "required": ["summary", "paragraphs"],
+}

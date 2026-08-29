@@ -17,9 +17,10 @@ export interface VerifyResult { ok: boolean; verifier: string; message?: string 
 export interface SyncResponse {
   request_id: string; base_prose_version: number; base_code_version: number; target_side: Side;
   line_edits: LineEdit[]; prose: string; code: string; blocks: Block[]; latency_ms: number; model: string;
-  usage: Record<string, unknown>; warnings: string[]; verification?: VerifyResult | null;
+  usage: Record<string, unknown>; warnings: string[]; verification?: VerifyResult | null; code_blocks?: Block[];
 }
-export interface GenerateResponse { prose: string; blocks: Block[]; latency_ms: number; model: string }
+export interface GenerateResponse { prose: string; blocks: Block[]; code_blocks?: Block[]; latency_ms: number; model: string }
+export interface CreateResponse { prose: string; code: string; blocks: Block[] }
 export interface Feedback {
   sync_id: string; outcome: "accepted" | "modified" | "reverted"; dwell_s: number; final_text_by_block: Record<string, string>;
 }

@@ -2,7 +2,7 @@ import { ChildProcess, spawn } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
-import { Block, Feedback, GenerateResponse, SyncEvent, SyncRequest, TreeResult } from "./protocol";
+import { Block, CreateResponse, Feedback, GenerateResponse, Snapshot, SyncEvent, SyncRequest, TreeResult } from "./protocol";
 import { Settings } from "./settings";
 
 /** Talks to the prosesync HTTP server; spawns it when endpoint === "auto". */
@@ -82,16 +82,28 @@ export class SyncClient implements vscode.Disposable {
     return (await r.json()) as GenerateResponse;
   }
 
+  /** New prose file -> code (+ normalised prose and map). Summary-only prose is allowed. */
+  async create(prose: string, language: string, codePath: string): Promise<CreateResponse> {
+    const r = await fetch(`${await this.url()}/create`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ prose, language, code_path: codePath }),
+    });
+    if (!r.ok) throw new Error(`create failed: ${r.status} ${await r.text()}`);
+    return (await r.json()) as CreateResponse;
+  }
+
   /** Rebuild the block map for an existing pair without the model; undefined when the prose is stale. */
-  async align(prose: string, code: string, language: string): Promise<Block[] | undefined> {
+  async align(prose: string, code: string, language: string, codePath: string, prosePath: string): Promise<Snapshot | undefined> {
     const r = await fetch(`${await this.url()}/align`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ prose, code, language }),
+      body: JSON.stringify({ prose, code, language, code_path: codePath, prose_path: prosePath }),
     });
     if (r.status === 409) return undefined;
     if (!r.ok) throw new Error(`align failed: ${r.status} ${await r.text()}`);
-    return ((await r.json()) as { blocks: Block[] }).blocks;
+    const j = (await r.json()) as { blocks: Block[]; prose: string; code: string; source: string };
+    return { prose: j.prose, code: j.code, blocks: j.blocks };
   }
 
   /** Streams SSE events; resolves when the stream ends. Abort via signal. */

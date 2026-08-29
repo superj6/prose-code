@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 Side = Literal["prose", "code"]
 EditOp = Literal["replace", "delete"]
+PairMode = Literal["paired", "free"]  # paired: block N of prose <-> block N of code; free: independent partitions
 
 
 def other_side(side: Side) -> Side:
@@ -37,6 +38,7 @@ class Snapshot(BaseModel):
     prose: str
     code: str
     blocks: list[Block]
+    code_blocks: list[Block] = Field(default_factory=list)  # free mode only: the code side\'s own partition
 
 
 class Pair(BaseModel):
@@ -47,6 +49,7 @@ class Pair(BaseModel):
     code: str
     prose_version: int = 0
     code_version: int = 0
+    mode: PairMode = "paired"
 
 
 class Hunk(BaseModel):
@@ -131,6 +134,7 @@ class SyncResponse(BaseModel):
     prose: str
     code: str
     blocks: list[Block]
+    code_blocks: list[Block] = Field(default_factory=list)
     verification: VerifyResult | None = None
     latency_ms: int = 0
     model: str = ""
@@ -140,6 +144,16 @@ class SyncResponse(BaseModel):
 
 class GenerateResponse(BaseModel):
     prose: str
+    blocks: list[Block]
+    code_blocks: list[Block] = Field(default_factory=list)
+    latency_ms: int = 0
+    model: str = ""
+    usage: dict[str, Any] = Field(default_factory=dict)
+
+
+class GenerateCodeResponse(BaseModel):
+    code: str
+    prose: str  # the prose, normalised (one paragraph per block)
     blocks: list[Block]
     latency_ms: int = 0
     model: str = ""

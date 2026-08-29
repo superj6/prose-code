@@ -1,11 +1,6 @@
 # rules/
-This package provides transaction categorisation by exposing its public APIs, loading ordered rules, and evaluating transactions with reusable keyword, regular-expression, and amount matchers. Start with `__init__.py` for the public interface, `engine.py` for rule application, and `matchers.py` for the matching logic used by the engine.
+This package provides a rule-based transaction categorisation system. It exposes the public API through `__init__.py`, defines transaction matching strategies in `matchers.py`, and coordinates ordered rule loading and application in `engine.py`.
 
-## __init__.py
-This package entry point exposes the rule, matching, and categorisation APIs by importing their implementations and defining the public export list. It provides the central interface through which the functionality in `engine.py` and `matchers.py` can be accessed.
+`matchers.py` contains the reusable predicate factories that determine whether a transaction matches a criterion: keyword and regular-expression matchers inspect payee or note text, while an amount matcher identifies small expenses. Each factory captures its configuration and returns a callable accepting a `Transaction` and yielding a boolean result.
 
-## engine.py
-This module loads ordered categorisation rules and applies them to transactions, assigning each transaction the category from its first matching rule. It uses the matcher factories from `matchers.py`, while handling comments and blank lines in rule files and preserving each rule’s source text.
-
-## matchers.py
-This module provides matcher factories for transactions, including keyword and regular-expression checks against payee or note text and an amount matcher for small expenses. The factories encapsulate their criteria and return boolean-producing callables that are consumed by the rule-processing logic in `engine.py`.
+`engine.py` is the main processing layer. It reads ordered categorisation rules, skips blank lines and comments, retains each rule’s source text, and applies rules to transactions in order, assigning the category associated with the first successful match. `__init__.py` gathers and re-exports these rule, matching, and categorisation interfaces as the package’s public entry point.

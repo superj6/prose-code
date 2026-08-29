@@ -1,6 +1,6 @@
 # web/
-This directory contains the formatting and rendering logic for producing reports. `format.ts` supplies reusable display-formatting helpers, while `render.ts` combines them to generate aligned text or compact HTML reports with monthly totals and top categories.
+This directory contains the formatting and rendering pieces for producing reports of monthly totals and top categories. `format.ts` supplies reusable display helpers, while `render.ts` assembles those formatted values into either plain-text or compact HTML output.
 
-`format.ts` provides the shared formatting helpers used throughout report output: it converts integer-cent currency values, `YYYY-MM` month keys, and text alignment requirements into display-ready strings. `render.ts` relies on these helpers to keep its plain-text and HTML representations consistent.
+`format.ts` is the shared presentation utility layer. It converts integer-cent amounts into locale-aware currency strings, formats month keys as `YYYY-MM`, and applies configurable fixed-width alignment and padding for readable text output. These helpers keep formatting rules consistent across report views.
 
-`render.ts` assembles reports containing monthly totals and top categories, rendering them as either aligned plain text or compact HTML. It uses the month, currency, and padding utilities from `format.ts` to standardize the presentation across both output modes.
+`render.ts` is the main report-rendering entry point. It takes monthly totals and top-category data, uses the month, currency, and padding helpers from `format.ts`, and produces either aligned plain text or compact HTML. Plain text emphasizes column alignment, while HTML provides a concise markup representation of the same report content.

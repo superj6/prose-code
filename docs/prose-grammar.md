@@ -25,11 +25,18 @@ these summaries.
 
 ## Directory prose
 
-Every directory can carry a `DIR.prose`: a `# dirname/` summary block plus one `## child`
-paragraph per file or subdirectory that has prose. Its "code side" is synthetic - the children's
-summary paragraphs - so the same block machinery keeps it in sync: when a file's summary changes,
-the parent paragraph follows (upward propagation); editing a child's paragraph in `DIR.prose` can
-be pushed down into that child's summary and from there into its code.
+Every directory can carry a `DIR.prose`: a `# dirname/` summary block followed by **as many
+paragraphs as the directory deserves** - purpose, how the children fit together, entry points,
+what a newcomer should know. It is free-form: it does not have to list every file, but it must be
+grounded in the directory's contents and use children's exact names in backticks.
+
+Its "code side" is synthetic: one block per immediate child holding that child's summary and, for
+subdirectories, an outline of everything beneath - the entire essence of the directory. The two
+sides are synced without a one-to-one pairing: when a child's summary changes, only the paragraphs
+whose claims are affected are rewritten (upward propagation); when you edit `DIR.prose`, the
+children whose description changed get new summaries, and those flow into their code (push-down).
+Naming a child that does not exist yet (`## new_module.py`, `## subdir/`) creates it from the
+summary.
 
 ## Style
 

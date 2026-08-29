@@ -60,3 +60,28 @@ def test_align_rebuilds_or_409(tmp_path):
     assert r.status_code == 200 and [b["id"] for b in r.json()["blocks"]] == ["s", "b1", "b2", "b3"]
     r = client.post("/align", json={"prose": "only one paragraph\n", "code": PY_CODE, "language": "python"})
     assert r.status_code == 409
+
+
+def test_create_from_new_prose_file(tmp_path):
+    cfg = load_config(overrides=[f"log.dir={tmp_path}/logs"])
+    client = TestClient(create_app(cfg, "mock"))
+    r = client.post("/create", json={"prose": "# c.py\nGreets people.\n", "language": "python", "code_path": "c.py"}).json()
+    assert r["code"].strip() and r["prose"].startswith("# c.py\nGreets people.") and r["blocks"][0]["id"] == "s"
+
+
+def test_align_prefers_committed_base(tmp_path):
+    import subprocess
+
+    cfg = load_config(overrides=[f"log.dir={tmp_path}/logs"])
+    client = TestClient(create_app(cfg, "mock"))
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    run = lambda *a: subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True)
+    run("init", "-q"); run("config", "user.email", "t@t"); run("config", "user.name", "t")
+    gen = client.post("/generate", json={"code": PY_CODE, "language": "python", "code_path": "x.py"}).json()
+    (repo / "x.py").write_text(PY_CODE); (repo / "x.py.prose").write_text(gen["prose"])
+    run("add", "."); run("commit", "-q", "-m", "pair")
+    edited = PY_CODE + "\n\ndef extra():\n    return 1\n"   # a clone with an uncommitted code edit
+    (repo / "x.py").write_text(edited)
+    r = client.post("/align", json={"prose": gen["prose"], "code": edited, "language": "python", "code_path": str(repo / "x.py"), "prose_path": str(repo / "x.py.prose")}).json()
+    assert r["source"] == "git" and r["code"] == PY_CODE and [b["id"] for b in r["blocks"]] == ["s", "b1", "b2", "b3"]

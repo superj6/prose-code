@@ -14,6 +14,7 @@ export interface Settings {
   feedbackWindowS: number;
   propagateUp: boolean;
   pushDownOnSave: "ask" | "always" | "never";
+  autoGenerate: "onFirstSave" | "onCreate" | "off";
 }
 
 export function getSettings(): Settings {
@@ -32,5 +33,6 @@ export function getSettings(): Settings {
     feedbackWindowS: c.get("feedbackWindowS", 30),
     propagateUp: c.get("propagateUp", true),
     pushDownOnSave: c.get("pushDownOnSave", "ask"),
+    autoGenerate: c.get("autoGenerate", "onFirstSave"),
   };
 }

@@ -5,6 +5,7 @@ block is deleted (its leftover lines merge into a neighbour) or split.
 """
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 
 from . import blocks as B
@@ -53,7 +54,8 @@ class DocState:
         self.ids: list[str] = [b.id for b in blocks]
         self.prose_parts: list[str] = B.block_text(prose, blocks, "prose")
         self.code_parts: list[str] = B.block_text(code, blocks, "code")
-        self.next_id = B.next_block_id(blocks)
+        self.id_prefix = next((b.id[0] for b in blocks if re.fullmatch(r"[a-z]\d+", b.id)), "b")
+        self.next_id = B.next_block_id(blocks, self.id_prefix)
 
     # -- accessors -------------------------------------------------------------------------
     def parts(self, side: Side) -> list[str]:
@@ -100,7 +102,7 @@ class DocState:
         if new_text == parts[i]:
             return None
         parts[i] = new_text
-        self._maybe_split(i)
+        self._maybe_split(i, target)
         return LineEdit(side=target, start=start, end=end, new_text=new_text, block=edit.block, reason=edit.reason)
 
     def _delete(self, i: int, target: Side) -> None:
@@ -116,10 +118,26 @@ class DocState:
         del self.prose_parts[i]
         del self.code_parts[i]
 
-    def _maybe_split(self, i: int) -> None:
-        """If block ``i`` now segments into k>1 units on BOTH sides, split it into k blocks."""
+    def _maybe_split(self, i: int, target: Side = "prose") -> None:
+        """If block ``i`` now segments into k>1 units on BOTH sides, split it into k blocks.
+        Single-sided partitions (free mode: the other side is empty everywhere) split on the
+        target side alone."""
         prose_ranges = B.segment_prose(self.prose_parts[i])
         code_ranges = B.segment_code(self.code_parts[i], self.language, self.min_block_lines)
+        other = other_side(target)
+        if all(not t for t in self.parts(other)):
+            ranges = prose_ranges if target == "prose" else code_ranges
+            k = len(ranges)
+            if k < 2:
+                return
+            lines = B.split_lines(self.parts(target)[i])
+            new_parts = [B.join_lines(lines[s:e]) for s, e in ranges]
+            new_ids = [self.ids[i]] + [f"{self.id_prefix}{self.next_id + n}" for n in range(k - 1)]
+            self.next_id += k - 1
+            self.ids[i : i + 1] = new_ids
+            self.parts(target)[i : i + 1] = new_parts
+            self.parts(other)[i : i + 1] = [""] * k
+            return
         k = len(prose_ranges)
         if k < 2 or k != len(code_ranges):
             return
@@ -127,7 +145,7 @@ class DocState:
         code_lines = B.split_lines(self.code_parts[i])
         new_prose = [B.join_lines(prose_lines[s:e]) for s, e in prose_ranges]
         new_code = [B.join_lines(code_lines[s:e]) for s, e in code_ranges]
-        new_ids = [self.ids[i]] + [f"b{self.next_id + n}" for n in range(k - 1)]
+        new_ids = [self.ids[i]] + [f"{self.id_prefix}{self.next_id + n}" for n in range(k - 1)]
         self.next_id += k - 1
         self.ids[i : i + 1] = new_ids
         self.prose_parts[i : i + 1] = new_prose

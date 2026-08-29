@@ -4,6 +4,7 @@
     prosesync sync  examples/calc.py --changed code  # update the prose after editing the code
     prosesync sync  examples/calc.py --changed prose # update the code after editing the prose
     prosesync gen   src/                             # every file under src/ + a DIR.prose per directory
+    prosesync gen   examples/new_thing.py.prose     # the inverse: write a prose file first, get the code
     prosesync push-down src/                         # apply edits made in src/DIR.prose to the children
     prosesync check-model                            # verify sync.model exists on the endpoint
     prosesync serve                                  # HTTP server for the VS Code extension
@@ -50,6 +51,8 @@ async def cmd_gen(args) -> int:
             print(f"error {pth}: {err}", file=sys.stderr)
         print(f"{len(result.generated)} file(s) written, {len(result.errors)} error(s)", file=sys.stderr)
         return 1 if result.errors else 0
+    if code_path.name.endswith(".prose"):
+        return await _gen_code_from_prose(engine, code_path, args)
     code = code_path.read_text()
     language = args.lang or store.language_for(code_path)
     resp = await engine.generate(code, language, str(code_path))
@@ -60,7 +63,41 @@ async def cmd_gen(args) -> int:
     print(f"wrote {out} ({len(resp.blocks)} blocks, {resp.latency_ms} ms, model={resp.model})", file=sys.stderr)
     if args.print:
         print(resp.prose)
+    if not args.no_propagate:
+        await _propagate(engine, code_path, args.sidecar_dir)
     return 0
+
+
+async def _gen_code_from_prose(engine, prose_path: Path, args) -> int:
+    """The inverse: FILE.prose -> FILE (refuses to overwrite an existing code file)."""
+    from . import store
+    from .models import Snapshot
+
+    code_path = prose_path.with_name(prose_path.name[: -len(".prose")])
+    if code_path.exists() and not args.overwrite:
+        print(f"{code_path} exists; use `prosesync sync {code_path.name} --changed prose` to update it, or --overwrite", file=sys.stderr)
+        return 2
+    language = args.lang or store.language_for(code_path)
+    prose, code, blocks = await engine.create_from_prose(prose_path.read_text(), language, str(code_path))
+    code_path.write_text(code)
+    prose_path.write_text(prose)
+    store.save_snapshot(code_path, Snapshot(prose=prose, code=code, blocks=blocks))
+    print(f"wrote {code_path} ({len(blocks)} blocks)", file=sys.stderr)
+    if args.print:
+        print(code)
+    if not args.no_propagate:
+        await _propagate(engine, code_path, args.sidecar_dir)
+    return 0
+
+
+async def _propagate(engine, code_path: Path, sidecar_dir: str) -> None:
+    from .tree import propagate_up
+
+    up = await propagate_up(engine, code_path, sidecar_dir)
+    for pth, n in up.synced:
+        print(f"  propagated: {pth} ({n} edit(s))", file=sys.stderr)
+    for pth, err in up.errors:
+        print(f"  propagate error {pth}: {err}", file=sys.stderr)
 
 
 async def cmd_sync(args) -> int:
@@ -80,14 +117,17 @@ async def cmd_sync(args) -> int:
     if base is None:
         from .align import resegment
 
-        blocks = resegment(prose, code, language, int(cfg.segment.min_block_lines))
+        base_prose, base_code, source = store.base_texts(code_path, prose_file)
+        blocks = resegment(base_prose, base_code, language, int(cfg.segment.min_block_lines))
         if blocks is None:
             print("no snapshot map and the prose cannot be paired with the code; run `prosesync gen`", file=sys.stderr)
             return 2
-        base = Snapshot(prose=prose, code=code, blocks=blocks)
+        base = Snapshot(prose=base_prose, code=base_code, blocks=blocks)
         store.save_snapshot(code_path, base)
-        print(f"rebuilt block map ({len(blocks)} blocks) from headings/order; nothing to sync yet", file=sys.stderr)
-        return 0
+        print(f"rebuilt block map ({len(blocks)} blocks) from the {'committed' if source == 'git' else 'current'} files", file=sys.stderr)
+        if base_prose == prose and base_code == code:
+            print("nothing to sync yet", file=sys.stderr)
+            return 0
     other_dirty = (prose != base.prose) if args.changed == "code" else (code != base.code)
     req = SyncRequest(
         request_id=new_request_id(),
@@ -113,13 +153,7 @@ async def cmd_sync(args) -> int:
         store.save_snapshot(code_path, Snapshot(prose=resp.prose, code=resp.code, blocks=resp.blocks))
     print(f"{len(resp.line_edits)} edit(s) to {resp.target_side} in {resp.latency_ms} ms (model={resp.model})", file=sys.stderr)
     if not args.dry_run and not args.no_propagate:
-        from .tree import propagate_up
-
-        up = await propagate_up(engine, code_path, args.sidecar_dir)
-        for pth, n in up.synced:
-            print(f"  propagated: {pth} ({n} edit(s))", file=sys.stderr)
-        for pth, err in up.errors:
-            print(f"  propagate error {pth}: {err}", file=sys.stderr)
+        await _propagate(engine, code_path, args.sidecar_dir)
     return 0
 
 
@@ -165,7 +199,8 @@ def main(argv=None) -> int:
 
     g = sub.add_parser("gen", help="FILE -> FILE.prose; DIR -> every file under it plus DIR.prose per directory")
     g.add_argument("file"); g.add_argument("--lang"); g.add_argument("--print", action="store_true")
-    g.add_argument("--sidecar-dir", default=""); g.add_argument("--overwrite", action="store_true", help="DIR mode: regenerate existing prose too")
+    g.add_argument("--sidecar-dir", default=""); g.add_argument("--overwrite", action="store_true", help="DIR mode: regenerate existing prose too; FILE.prose mode: overwrite the code file")
+    g.add_argument("--no-propagate", action="store_true", help="do not update ancestor DIR.prose files")
     s = sub.add_parser("sync"); s.add_argument("file"); s.add_argument("--changed", choices=["code", "prose"], required=True)
     s.add_argument("--lang"); s.add_argument("--dry-run", action="store_true"); s.add_argument("--sidecar-dir", default="")
     s.add_argument("--no-propagate", action="store_true", help="do not update ancestor DIR.prose files")

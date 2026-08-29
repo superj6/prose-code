@@ -74,3 +74,14 @@ def test_pair_ranges_with_leading_summary():
     assert B.check_partition(blocks, "prose", len(B.split_lines(prose))) is None
     assert B.pair_ranges(PY_PROSE, B.segment_prose(PY_PROSE), B.segment_code(PY_CODE, "python"))[0].id == "b1"
     assert B.pair_ranges("# only summary\n", [(0, 1)], B.segment_code(PY_CODE, "python")) is None
+
+
+def test_affected_uses_snapshot_coordinates_for_deletion_at_block_end():
+    # snapshot: b1 = lines 0-3, b2 = lines 3-6; the user deletes the last line of b1 (line 2)
+    blocks = [Block(id="b1", prose=(0, 1), code=(0, 3)), Block(id="b2", prose=(1, 2), code=(3, 6))]
+    hunks = [Hunk(old_start=2, old_lines=1, new_start=2, new_lines=0)]
+    assert B.affected_block_ids(blocks, hunks, "code") == ["b1"]
+    shifted = B.shift_ranges(blocks, hunks, "code")
+    assert [b.code for b in shifted] == [(0, 2), (2, 5)]
+    # on the shifted map the same hunk would (wrongly) look like it touches b2: that is why callers pass snapshot blocks
+    assert B.affected_block_ids(shifted, hunks, "code") == ["b2"]

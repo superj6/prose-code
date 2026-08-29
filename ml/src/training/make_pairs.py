@@ -51,10 +51,10 @@ def score_completion(rec: dict[str, Any], completion: str, cfg) -> float:
     base = Snapshot(prose=rec["prose"], code=rec["code"], blocks=[Block(**b) for b in rec["blocks"]])
     prose_now, code_now = rec.get("prose_now", rec["prose"]), rec.get("code_now", rec["code"])
     try:
-        blocks, hunks, _ = realign(base, prose_now, code_now, rec["language"], changed, False, int(cfg.segment.min_block_lines))
+        blocks, hunks, _, base_blocks = realign(base, prose_now, code_now, rec["language"], changed, False, int(cfg.segment.min_block_lines))
     except Exception:  # noqa: BLE001
         return 0.0
-    _, editable = affected(blocks, hunks, changed, int(cfg.sync.context_blocks))
+    _, editable = affected(base_blocks, hunks, changed, int(cfg.sync.context_blocks))
     state = DocState(prose_now, code_now, blocks, rec["language"], int(cfg.segment.min_block_lines))
     warnings = []
     for e in edits:

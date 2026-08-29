@@ -79,16 +79,25 @@ is the training signal for the custom model.
 
 ## Hierarchical prose
 
-Every file's prose starts with a `# file` summary block; every directory can have a `DIR.prose`
-with a `# dir/` summary and one `## child` paragraph per file or subdirectory. The directory pair's
-"code side" is synthetic — the children's summaries — so the same block machinery keeps it in sync:
+Every file's prose starts with a `# file` summary block; every directory can have a `DIR.prose`:
+a `# dir/` summary plus a free-form account of the directory (as many paragraphs as it deserves,
+grounded in the children's summaries and an outline of all descendants). The directory pair is
+synced without one-to-one pairing — the changed side's blocks pick what is affected, the model
+rewrites only the paragraphs (or child summaries) whose claims changed:
 
 ```sh
 .venv/bin/prosesync gen src/                 # prose for every file under src/ + DIR.prose per directory (deepest first)
 .venv/bin/prosesync sync src/calc.py --changed code   # ...then ancestors whose child paragraph changed are re-synced (upward)
 .venv/bin/prosesync push-down src/           # you edited src/DIR.prose: update the children's summaries, then their code,
-                                             # then the paragraphs describing the changed code (downward, depth-limited)
+                                             # then the paragraphs describing the changed code (downward, depth-limited);
+                                             # a `## new_file.py` / `## new_dir/` paragraph creates that child
+.venv/bin/prosesync gen src/thing.py.prose   # the inverse of gen: a prose file (even summary-only) -> the code file
 ```
+
+New files: with `prosecode.autoGenerate` (default `onFirstSave`) a supported source file saved
+without prose gets it generated, and a `.prose` file saved without its code file gets the code
+written — both followed by an upward propagation. Deleting or renaming a source file moves or
+removes its sidecar and updates the directory prose. Deleting prose never deletes code.
 
 In VS Code: **Prose Code: Open Directory Prose** (generates if missing), upward propagation runs
 after every file sync (`prosecode.propagateUp`), and saving a `DIR.prose` offers to push down

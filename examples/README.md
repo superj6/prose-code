@@ -7,7 +7,7 @@ report on them. Small enough to read in ten minutes, structured enough to have a
 
 ```
 ledger/
-  DIR.prose              <- directory prose: what the project is, one paragraph per child
+  DIR.prose              <- directory prose: what the project is and how the parts fit (free-form)
   ledger/                <- the Python package
     DIR.prose
     models.py            Transaction / Account (amounts in cents), validation
@@ -48,9 +48,14 @@ Then, in VS Code with the extension running (or with `prosesync sync … --chang
    itself changed.
 3. **Prose → code.** In `ledger/reports.py.prose`, change `## top_categories` to say ties are
    broken by most recent transaction instead of by name. Watch the code change; run the tests.
-4. **Downward propagation.** In `ledger/DIR.prose`, extend the `## reports.py` paragraph with
-   "and a `budget_status(transactions, limits)` helper comparing spend per category to a limit".
-   Save, accept the push-down: `reports.py` gains the function and its prose gains a paragraph.
+4. **Downward propagation.** In `ledger/DIR.prose`, say that `reports.py` also provides a
+   `budget_status(transactions, limits)` helper comparing spend per category to a limit. Save,
+   accept the push-down: `reports.py` gains the function and its prose gains a paragraph.
+   Or name a child that does not exist yet — "`## export.py` writes a report as CSV" — and it is
+   created from that sentence.
+6. **The inverse.** Create `ledger/ledger/budget.py.prose` with just `# budget.py` and a summary
+   sentence, save it: the code file appears, its prose gets proper paragraphs, and `DIR.prose`
+   learns about it.
 5. **Both sides at once.** Edit the code of `engine.py` and the prose of `## load_rules` before
    the debounce fires; both intents survive (two-pass sync).
 

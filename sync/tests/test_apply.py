@@ -44,7 +44,7 @@ def test_replace_that_splits_into_two_blocks_on_both_sides():
     # user added a second function inside b2's code region; model rewrites b2's prose as 2 paragraphs
     code = PY_CODE.replace("class Cache:", "def helper():\n    return 1\n\n\nclass Cache:")
     base = Snapshot(prose=PY_PROSE, code=PY_CODE, blocks=blocks)
-    shifted, _hunks, _ = realign(base, PY_PROSE, code, "python", "code", False)
+    shifted, _hunks, _, _ = realign(base, PY_PROSE, code, "python", "code", False)
     assert [b.id for b in shifted] == ["b1", "b2", "b3"]
     state = DocState(PY_PROSE, code, shifted, "python")
     state.apply(Edit(op="replace", block="b2", text="## fetch\nFetch stuff.\n\n## helper\nReturn 1."), "prose")
@@ -61,7 +61,7 @@ def test_realign_with_both_sides_dirty():
     base = Snapshot(prose=PY_PROSE, code=PY_CODE, blocks=blocks)
     code = PY_CODE.replace("return self.d.get(k)", "return self.d.get(k, None)")
     prose = PY_PROSE.replace("Import `os`", "Import `os` (needed)")
-    shifted, hunks, other = realign(base, prose, code, "python", "code", True)
+    shifted, hunks, other, _ = realign(base, prose, code, "python", "code", True)
     assert len(hunks) == 1 and len(other) == 1
     assert [b.id for b in shifted] == ["b1", "b2", "b3"]
 
@@ -70,5 +70,5 @@ def test_realign_rebuilds_inconsistent_map():
     blocks = _blocks()
     broken = [blocks[0].model_copy(update={"code": (0, 2)})] + blocks[1:]
     base = Snapshot(prose=PY_PROSE, code=PY_CODE, blocks=broken)
-    shifted, _, _ = realign(base, PY_PROSE, PY_CODE, "python", "code", False)
+    shifted, _, _, _ = realign(base, PY_PROSE, PY_CODE, "python", "code", False)
     assert [b.code for b in shifted] == [b.code for b in blocks]

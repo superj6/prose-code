@@ -77,8 +77,8 @@ async def run_item(engine: Engine, item: dict[str, Any]) -> dict[str, Any]:
     # fragile, so recompute it the same way the engine does)
     from prosesync.align import affected, realign
 
-    shifted, hunks, _ = realign(req.base, prose_now, code_now, item["language"], changed, req.other_side_dirty, engine.min_block_lines)
-    _, editable = affected(shifted, hunks, changed, int(engine.cfg.sync.context_blocks))
+    shifted, hunks, _, base_blocks = realign(req.base, prose_now, code_now, item["language"], changed, req.other_side_dirty, engine.min_block_lines)
+    _, editable = affected(base_blocks, hunks, changed, int(engine.cfg.sync.context_blocks))
     scores = score(
         language=item["language"], target=target, before=before, after=after, expected=item.get("expected"),
         blocks_before=shifted, blocks_after=resp.blocks, editable=editable, warnings=resp.warnings,

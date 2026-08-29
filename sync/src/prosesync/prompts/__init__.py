@@ -146,3 +146,68 @@ def build_generate_messages(
         {"role": "system", "content": system_prompt(kind, version)},
         {"role": "user", "content": "\n".join(user)},
     ]
+
+
+def build_generate_code_messages(*, language: str, prose: str, blocks: Sequence[Block], version: str = "v1") -> list[dict[str, str]]:
+    body = [b for b in blocks if b.id != SUMMARY_ID]
+    user = [
+        f"Language: {language}",
+        f"Write the code for each of the {len(body)} numbered blocks, in order.",
+        "",
+        "=== PROSE ===",
+        render_blocks(prose, blocks, "prose"),
+        "",
+        'Return JSON: {"blocks": [{"block": "b1", "code": "..."}, ...]} with one entry per numbered block.',
+    ]
+    return [
+        {"role": "system", "content": system_prompt("generate_code", version)},
+        {"role": "user", "content": "\n".join(user)},
+    ]
+
+
+def build_free_sync_messages(
+    *, language: str, prose: str, code: str, prose_blocks: Sequence[Block], code_blocks: Sequence[Block], changed: Side,
+    hunks: Sequence[Hunk], affected: Sequence[str], editable: Sequence[str], version: str = "v1", unpushed: bool = False,
+) -> list[dict[str, str]]:
+    """Free mode (directory prose): each side has its own partition; the model edits the target side."""
+    target = other_side(changed)
+    user = [
+        f"Language: {language}",
+        "",
+        "=== CODE (one block per immediate child: its summary, and for directories an outline of all descendants) ===",
+        render_blocks(code, code_blocks, "code"),
+        "",
+        "=== PROSE (free-form account of the directory) ===",
+        render_blocks(prose, prose_blocks, "prose"),
+        "",
+        f"=== CHANGE ({changed} side, unified diff vs the last synced state) ===",
+        render_hunks(hunks),
+    ]
+    if unpushed:
+        user += ["", "NOTE: the PROSE side also has user edits that have not been pushed to the children yet; leave them alone."]
+    user += [
+        "",
+        f"The {changed.upper()} side changed. Produce edits to the {target.upper()} side.",
+        f"Affected blocks: {', '.join(affected) or '(none)'}. Editable blocks: {', '.join(editable) or '(none)'}.",
+        f'Return JSON: {{"edits": [{{"op", "block", "text", "reason"}}]}} with edits to the {target.upper()} side only.',
+    ]
+    return [
+        {"role": "system", "content": system_prompt("system_free", version)},
+        {"role": "user", "content": "\n".join(user)},
+    ]
+
+
+def build_generate_free_messages(*, language: str, code: str, blocks: Sequence[Block], version: str = "v1") -> list[dict[str, str]]:
+    user = [
+        f"Language: {language}",
+        f"The directory has {len(blocks)} immediate children (blocks). Write the summary and as many paragraphs as it deserves.",
+        "",
+        "=== CHILDREN ===",
+        render_blocks(code, blocks, "code"),
+        "",
+        'Return JSON: {"summary": "...", "paragraphs": ["...", "..."]}.',
+    ]
+    return [
+        {"role": "system", "content": system_prompt("generate_dir", version)},
+        {"role": "user", "content": "\n".join(user)},
+    ]

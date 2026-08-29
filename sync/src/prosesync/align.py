@@ -14,8 +14,10 @@ class NeedsRegenerate(ValueError):
 
 def realign(
     base: Snapshot, prose: str, code: str, language: str, changed: Side, other_dirty: bool, min_block_lines: int = 3
-) -> tuple[list[Block], list[Hunk], list[Hunk]]:
-    """Return (blocks in current coordinates, hunks on the changed side, hunks on the other side)."""
+) -> tuple[list[Block], list[Hunk], list[Hunk], list[Block]]:
+    """Return (blocks in current coordinates, hunks on the changed side, hunks on the other side,
+    blocks in snapshot coordinates). Affected-block detection must use the snapshot-coordinate
+    blocks, because hunks are expressed in snapshot coordinates."""
     blocks = list(base.blocks)
     bad = B.check_partition(blocks, "prose", len(B.split_lines(base.prose))) or B.check_partition(
         blocks, "code", len(B.split_lines(base.code))
@@ -30,6 +32,7 @@ def realign(
     cur_of = {"prose": prose, "code": code}
     hunks_changed = B.compute_hunks(base_of[changed], cur_of[changed])
     hunks_other = B.compute_hunks(base_of[other], cur_of[other]) if other_dirty else []
+    base_blocks = list(blocks)
     blocks = B.shift_ranges(blocks, hunks_changed, changed)
     if hunks_other:
         blocks = B.shift_ranges(blocks, hunks_other, other)
@@ -37,7 +40,7 @@ def realign(
         err = B.check_partition(blocks, side, len(B.split_lines(cur_of[side])))
         if err:
             raise NeedsRegenerate(f"after shifting: {err}")
-    return blocks, hunks_changed, hunks_other
+    return blocks, hunks_changed, hunks_other, base_blocks
 
 
 def resegment(prose: str, code: str, language: str, min_block_lines: int = 3) -> list[Block] | None:

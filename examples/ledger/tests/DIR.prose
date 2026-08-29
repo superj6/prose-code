@@ -1,4 +1,6 @@
 # tests/
-This directory contains tests for the ledger package, covering its parsing, categorisation, reporting, formatting, and validation behavior.
+This directory contains the ledger package’s test coverage, focused entirely on verifying core parsing, categorisation, reporting, formatting, and validation behaviour.
 
-`test_ledger.py` verifies the ledger package’s amount and line parsing, rule-based categorisation, category and monthly reporting, formatting, and transaction validation. It provides representative transaction input and checks both expected results and explicitly raised `LedgerError` cases, serving as the directory’s coverage of core ledger behavior.
+`test_ledger.py` exercises amount and transaction-line parsing using representative inputs, ensuring the ledger interprets source data correctly and rejects invalid cases through the expected `LedgerError` exceptions.
+
+The tests also cover rule-based categorisation, category and monthly reports, and output formatting. Together, they check both ordinary results and error paths, making this file the main reference for the package’s intended behaviour and a useful place to look when changing ledger rules, reports, or validation.
