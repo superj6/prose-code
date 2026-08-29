@@ -104,6 +104,7 @@ extension shows a warning with the failing line and the sync is marked unverifie
 make seed DIRS="~/project/foo ~/project/bar"   # local repos -> ml/data/seed/ (20-300 line files, deduped)
 make synth PER_FILE=2                           # generate prose, propose small edits, sync -> ml/data/synth.jsonl
 make export-interactions                        # ~/.prosecode/logs -> ml/data/interactions.jsonl (real usage)
+make git-mine REPOS="~/src/a ~/src/b" && make git-label   # real small commits (1-3 hunks, one file) -> labelled records
 make data-stats
 .venv/bin/python ml/src/data/dataset.py render ml/data/synth.jsonl > /tmp/train.jsonl   # chat examples
 ```
@@ -112,7 +113,9 @@ Records (`ml/src/data/records.py`) hold the synced snapshot, the user's edited s
 block-op label; `dataset.py` renders them with the **same** `build_sync_messages` / realign /
 window code the server uses, so training prompts equal serving prompts by construction.
 Synthetic records are produced by the production engine itself (propose an edit → `Engine.sync`),
-so labels match the serving distribution; real interactions carry accept/modify/revert outcomes.
+so labels match the serving distribution; real interactions carry accept/modify/revert outcomes;
+git-mined edits are the most realistic code changes (use repos with granular, single-file commits —
+squash-style histories yield nothing).
 
 ## Training a custom model (Phase 4)
 

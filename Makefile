@@ -1,5 +1,5 @@
 PY := .venv/bin/python
-.PHONY: setup test test-sync test-ext build-ext serve gen sync eval lint seed synth export-interactions data-stats
+.PHONY: setup test test-sync test-ext build-ext serve gen sync eval lint seed synth export-interactions data-stats git-mine git-label
 
 setup:            ## venv + python deps + extension deps
 	python3 -m venv .venv && $(PY) -m pip install -q -U pip && $(PY) -m pip install -q -e "./sync[develop]"
@@ -43,3 +43,9 @@ export-interactions:
 
 data-stats:
 	$(PY) ml/src/data/dataset.py stats ml/data/synth.jsonl; $(PY) ml/src/data/dataset.py stats ml/data/interactions.jsonl
+
+git-mine:         ## make git-mine REPOS="~/src/foo ~/src/bar"   (small single-file commits -> ml/data/git_edits.jsonl)
+	$(PY) ml/src/data/git_mine.py --repos $(REPOS) --out ml/data/git_edits.jsonl --max $(or $(MAX),500)
+
+git-label:        ## label mined edits with the production engine -> ml/data/git_records.jsonl
+	$(PY) ml/src/data/git_mine.py --label ml/data/git_edits.jsonl --out ml/data/git_records.jsonl $(if $(BACKEND),--backend $(BACKEND))

@@ -24,16 +24,16 @@ GPU = "A100-40GB"
 
 app = modal.App(APP_NAME)
 
-image = (
+_IGNORE = [".git", ".venv", "outputs", "wandb", "__pycache__", ".pytest_cache", "extension/node_modules", "extension/dist", ".ruff_cache"]
+base_image = (
     modal.Image.debian_slim(python_version="3.12")
     .apt_install("git")
     .pip_install_from_requirements(str(REPO_ROOT / "ml" / "requirements.txt"))
     .env({"HF_HOME": "/data/hf_cache", "PYTHONUNBUFFERED": "1", "PROSESYNC_CONFIG": "/workspace/project/configs/base.yaml"})
-    .add_local_dir(
-        str(REPO_ROOT), remote_path="/workspace/project",
-        ignore=[".git", ".venv", "outputs", "wandb", "__pycache__", ".pytest_cache", "extension/node_modules", "extension/dist", ".ruff_cache"],
-    )
 )
+# add_local_dir must come last (files are mounted at container start, no rebuild per code change)
+image = base_image.add_local_dir(str(REPO_ROOT), remote_path="/workspace/project", ignore=_IGNORE)
+serve_image = base_image.pip_install("vllm").add_local_dir(str(REPO_ROOT), remote_path="/workspace/project", ignore=_IGNORE)
 volume = modal.Volume.from_name("prose-code", create_if_missing=True)
 env_secret = modal.Secret.from_dotenv(REPO_ROOT)
 
@@ -80,7 +80,7 @@ def dpo(config_path: str = "configs/modal_dpo.yaml", adapter: str = "/data/outpu
     _run(argv)
 
 
-@app.function(image=image.pip_install("vllm"), gpu=GPU, timeout=60 * 60, volumes={"/data": volume}, secrets=[env_secret])
+@app.function(image=serve_image, gpu=GPU, timeout=60 * 60, volumes={"/data": volume}, secrets=[env_secret])
 def serve(adapter: str = "/data/outputs/sft/final", base: str = "Qwen/Qwen2.5-Coder-1.5B-Instruct", merged: str = "/data/outputs/merged"):
     """Merge the adapter and start an OpenAI-compatible server (for A/B via sync.base_url)."""
     _run(["python", "ml/src/training/merge.py", "--base", base, "--adapter", adapter, "--out", merged])
