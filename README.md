@@ -102,7 +102,7 @@ extension shows a warning with the failing line and the sync is marked unverifie
 
 ```sh
 make eval BACKEND=mock                       # sanity: exercises the harness
-make eval                                    # gpt-5.6-luna on ml/data/eval_v0.jsonl
+make eval                                    # gpt-5.6-luna on ml/data/eval_v1.jsonl (18 cases; see docs/spike-results.md)
 make eval OVERRIDE="sync.base_url=http://localhost:8000/v1 sync.model=local"  # a served fine-tune
 ```
 

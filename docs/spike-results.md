@@ -53,3 +53,25 @@ Tokenize `text`, pass the tokens to `evaluate`, and return the result rounded to
 
 When run as a script, import command-line arguments, join them with spaces into one expression, calculate it with `calc`, and print the result; with no arguments the joined expression is empty and prints `0.0`, while errors are not caught.
 ```
+
+# Eval set v1 — 2026-08-28
+
+`make eval` on `ml/data/eval_v1.jsonl` (18 cases: python/typescript/go, code→prose and prose→code,
+rename, add-function split, delete, both-sides-dirty, and three cases on a 26-block file that
+exercise windowed context). Model `gpt-5.6-luna`, `reasoning_effort: low`, prompt `v1`.
+
+| run | n | errors | correct | collateral | schema_valid | syntax_valid | p50 ms | p95 ms |
+|---|---|---|---|---|---|---|---|---|
+| first run | 18 | 0 | 0.944 (17/18) | 0.019 | 1.0 | 1.0 | 2983 | 7945 |
+| after both-dirty fix | 18 | 0 | **1.0** | **0.0** | 1.0 | 1.0 | 2746 | 4856 |
+
+The single miss was `calc-both-dirty`: asked to sync a code change while the user had also edited
+a prose paragraph, the model "reconciled" that paragraph back to match the code — erasing user
+text. Fix (structural, not just prompt): a both-dirty request now runs two passes. Pass 1 applies
+the primary change with the user-edited target blocks marked off-limits; pass 2 applies the user's
+other-side edits to the primary side on top of pass 1. Both intents land, nothing is reverted, and
+the extension applies edits per side.
+
+Latency: prose→code cases that generate new code are the slow tail (4–8 s); code→prose sits at
+1.5–3 s. `cache_hit` is 0 here because every item is a distinct pair; repeated syncs of one pair
+hit ~99 % (see README, "Latency knobs").

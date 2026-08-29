@@ -98,3 +98,20 @@ def test_verification_repair_round(tmp_path):
     assert resp.code.endswith("return self.d.get(k, None)\n")
     assert resp.line_edits[-1].block == "*" and resp.line_edits[-1].start == 0
     assert any(w.startswith("repair round 1: ok") for w in resp.warnings)
+
+
+def test_both_dirty_runs_two_passes_and_keeps_user_text(engine):
+    gen = asyncio.run(engine.generate(PY_CODE, "python", "x.py"))
+    code = PY_CODE.replace("return self.d.get(k)", "return self.d.get(k, None)")  # user edit on code (b3)
+    prose = gen.prose.replace("Block b1: describes `import os`", "Block b1: describes `import os` (USER NOTE)")  # user edit on prose (b1)
+    req = SyncRequest(
+        request_id="r5", pair=Pair(pair_id="p", language="python", code_path="x.py", prose=prose, code=code),
+        base=Snapshot(prose=gen.prose, code=PY_CODE, blocks=gen.blocks), change=Change(side="code"), other_side_dirty=True,
+    )
+    resp = asyncio.run(engine.sync(req))
+    sides = [(le.side, le.block) for le in resp.line_edits]
+    assert ("prose", "b3") in sides and ("code", "b1") in sides  # pass 1 then pass 2
+    assert "(USER NOTE)" in resp.prose  # the user's prose edit survived pass 1
+    assert "return self.d.get(k, None)" in resp.code  # the user's code edit survived pass 2
+    assert any(w.startswith("pass 2 (prose -> code)") for w in resp.warnings)
+    assert not any("rejected" in w for w in resp.warnings)

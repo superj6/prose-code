@@ -22,9 +22,9 @@ Rules
 - Prose side: imperative, behavioural English. Start a paragraph with `## name` for a definition
   block when useful. Identifiers in backticks. Short bullets for multi-step logic. Describe
   behaviour, inputs, outputs and edge cases - not syntax. Do not repeat what other blocks say.
-- If both sides were edited by the user, the PRIMARY change (the side marked as changed) is
-  authoritative for the affected blocks; keep the user's edits on the other side unless they
-  directly contradict it, in which case update them and say so in `reason`.
+- If both sides were edited by the user, apply only the PRIMARY change (the side marked as
+  changed). The user's edits on the other side are pending intent handled in a separate step:
+  never modify, revert or "reconcile" them, even if they currently disagree with the primary side.
 - Names are part of the contract: when an identifier, signature, default value or constant changes
   on one side, update every editable block on the other side that mentions it (headings included).
 - `reason` is one short sentence shown to the user next to the edit.

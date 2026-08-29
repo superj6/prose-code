@@ -155,7 +155,7 @@ export class PairManager {
     };
     const applied: LineEdit[] = [];
     const originals: string[] = [];
-    let expectedTargetVersion = baseVersions[target];
+    const expectedVersion: Record<Side, number> = { ...baseVersions };
     let response: SyncResponse | undefined;
     let failure: { message: string; needs_regenerate: boolean } | undefined;
     this.ui.clearEdits();
@@ -163,22 +163,23 @@ export class PairManager {
     const onEvent = async (e: SyncEvent): Promise<void> => {
       if (gen !== this.generation || controller.signal.aborted) return;
       if (e.event === "preview") {
-        if (this.docs[target].version === expectedTargetVersion) this.ui.showPreview(e.data);
+        if (this.docs[e.data.side].version === expectedVersion[e.data.side]) this.ui.showPreview(e.data);
         return;
       }
       if (e.event === "edit") {
         const le = e.data;
-        if (this.docs[target].version !== expectedTargetVersion) {
-          // the user typed on the target side while we were syncing: drop this response
-          this.discard(controller, "target document changed during sync");
+        const side = le.side; // pass 2 of a both-dirty sync edits the primary side too
+        if (this.docs[side].version !== expectedVersion[side]) {
+          // the user typed on that side while we were syncing: drop this response
+          this.discard(controller, `${side} document changed during sync`);
           return;
         }
-        const lines = this.docs[target].getText().split("\n");
+        const lines = this.docs[side].getText().split("\n");
         originals.push(lines.slice(le.start, le.end).join("\n"));
         this.applying = true;
         let ok = false;
         try {
-          ok = await this.docs[target].applyLineEdit(le);
+          ok = await this.docs[side].applyLineEdit(le);
         } finally {
           this.applying = false;
         }
@@ -186,9 +187,9 @@ export class PairManager {
           this.discard(controller, "editor refused the edit");
           return;
         }
-        expectedTargetVersion = this.docs[target].version;
+        expectedVersion[side] = this.docs[side].version;
         applied.push(le);
-        this.ui.showEdit(target, le);
+        this.ui.showEdit(side, le);
       } else if (e.event === "done") {
         response = e.data;
       } else if (e.event === "error") {
@@ -241,15 +242,17 @@ export class PairManager {
   }
 
   private async finish(resp: SyncResponse, target: Side, applied: LineEdit[], originals: string[], syncId: string): Promise<void> {
-    // Safety net: the document must now equal what the server thinks it is.
-    const expected = target === "prose" ? resp.prose : resp.code;
-    if (normalize(this.docs[target].getText()) !== normalize(expected)) {
-      this.log("post-apply mismatch; replacing whole target document");
-      this.applying = true;
-      try {
-        await this.docs[target].replaceAll(expected);
-      } finally {
-        this.applying = false;
+    // Safety net: both documents must now equal what the server thinks they are.
+    for (const side of ["prose", "code"] as Side[]) {
+      const expected = side === "prose" ? resp.prose : resp.code;
+      if (normalize(this.docs[side].getText()) !== normalize(expected)) {
+        this.log(`post-apply mismatch on ${side}; replacing whole document`);
+        this.applying = true;
+        try {
+          await this.docs[side].replaceAll(expected);
+        } finally {
+          this.applying = false;
+        }
       }
     }
     this.snapshot = { prose: resp.prose, code: resp.code, blocks: resp.blocks }; // echo breaker #2
@@ -266,15 +269,15 @@ export class PairManager {
       return;
     }
     this.ui.setStatus("idle", `${applied.length} edit(s) in ${resp.latency_ms} ms`);
-    if (applied.length) this.trackFeedback(syncId, target, applied, originals);
+    if (applied.length) this.trackFeedback(syncId, applied, originals);
   }
 
-  private trackFeedback(syncId: string, target: Side, applied: LineEdit[], originals: string[]): void {
+  private trackFeedback(syncId: string, applied: LineEdit[], originals: string[]): void {
     const windowMs = this.opts.feedbackWindowS * 1000;
     this.timer.set(() => {
-      const text = this.docs[target].getText();
       let outcome: Feedback["outcome"] = "accepted";
       applied.forEach((le, i) => {
+        const text = this.docs[le.side].getText();
         const kept = le.new_text === "" ? !text.includes(originals[i]) || originals[i] === "" : text.includes(le.new_text.replace(/\n$/, ""));
         if (kept) return;
         const reverted = originals[i] !== "" && text.includes(originals[i]);

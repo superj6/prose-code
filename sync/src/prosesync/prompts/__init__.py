@@ -82,6 +82,7 @@ def build_sync_messages(
     other_hunks: Sequence[Hunk] = (),
     version: str = "v1",
     full: Sequence[str] | None = None,
+    protected: Sequence[str] = (),
 ) -> list[dict[str, str]]:
     """Prompt layout is cache-oriented: everything that is stable across consecutive syncs of the
     same pair (system prompt, then the two documents in a fixed order, without per-request tags)
@@ -108,7 +109,9 @@ def build_sync_messages(
     if other_side_dirty:
         note = (
             f"=== NOTE: the {target} side was ALSO edited by the user since the last sync (diff below). "
-            f"The {changed.upper()} change is primary; keep these edits unless they contradict it. ==="
+            f"Those edits are the user's pending intent and will be applied to the {changed.upper()} side in a "
+            f"separate step. Do NOT modify, revert or 'reconcile' them - blocks {', '.join(protected) or '(none)'} "
+            f"are off-limits - even where they disagree with the {changed.upper()} side right now. ==="
         )
         volatile += ["", note, render_hunks(other_hunks)]
     volatile += [

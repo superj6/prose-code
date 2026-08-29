@@ -94,10 +94,11 @@ class Engine:
         )
         context = int(self.cfg.sync.context_blocks)
         core, editable = affected(blocks, hunks, changed, context)
-        if req.other_side_dirty:
-            core2, editable2 = affected(blocks, other_hunks, target, context)
-            core = sorted(set(core) | set(core2), key=lambda i: [b.id for b in blocks].index(i))
-            editable = sorted(set(editable) | set(editable2), key=lambda i: [b.id for b in blocks].index(i))
+        protected: list[str] = []
+        if req.other_side_dirty and other_hunks:
+            # Blocks the user edited on the target side are theirs: pass 1 must not touch them.
+            protected, _ = affected(blocks, other_hunks, target, 0)
+            editable = [b for b in editable if b not in protected]
         warnings: list[str] = []
         state = DocState(pair.prose, pair.code, blocks, pair.language, self.min_block_lines)
         line_edits: list[LineEdit] = []
@@ -149,13 +150,55 @@ class Engine:
         messages = build_sync_messages(
             language=pair.language, prose=pair.prose, code=pair.code, blocks=blocks, changed=changed, hunks=hunks,
             affected=core, editable=editable, other_side_dirty=req.other_side_dirty, other_hunks=other_hunks,
-            version=self.prompt_version, full=full,
+            version=self.prompt_version, full=full, protected=protected,
         )
         result = await self.backend.complete_json(
             messages, EDITS_SCHEMA, "edits", on_object=on_object, model=req.options.model, on_partial=on_partial,
             cache_key=f"prosesync:{pair.pair_id}",
         )
         result_holder["raw"] = result.raw
+        if req.other_side_dirty and other_hunks:
+            # Pass 2: the user's edits on the target side are now the primary change, applied to the
+            # other side on top of pass 1's result. Both intents land; neither side is reverted.
+            blocks2 = state.blocks()
+            core2, editable2 = affected(blocks2, other_hunks, target, context)
+            protected2 = [b for b in core if b in [x.id for x in blocks2]]
+            editable2 = [b for b in editable2 if b not in protected2]
+            full2 = window_ids(blocks2, editable2, int(self.cfg.window.max_full_blocks), int(self.cfg.window.radius))
+            messages2 = build_sync_messages(
+                language=pair.language, prose=state.text("prose"), code=state.text("code"), blocks=blocks2,
+                changed=target, hunks=other_hunks, affected=core2, editable=editable2, version=self.prompt_version,
+                full=full2, protected=protected2,
+            )
+            applied2: list[Edit] = []
+
+            async def on_object2(obj: dict[str, Any]) -> None:
+                try:
+                    edit = Edit.model_validate(obj)
+                except Exception as e:  # noqa: BLE001
+                    warnings.append(f"pass 2: invalid edit skipped: {e}")
+                    return
+                if edit.block not in editable2 or len(applied2) >= max_edits:
+                    warnings.append(f"pass 2: edit to {edit.block} rejected")
+                    return
+                try:
+                    le = state.apply(edit, changed)
+                except ApplyError as e:
+                    warnings.append(f"pass 2: edit to {edit.block} rejected: {e}")
+                    return
+                applied2.append(edit)
+                if le is not None:
+                    line_edits.append(le)
+                    if on_line_edit is not None:
+                        await on_line_edit(le)
+
+            result2 = await self.backend.complete_json(
+                messages2, EDITS_SCHEMA, "edits", on_object=on_object2, model=req.options.model,
+                cache_key=f"prosesync:{pair.pair_id}",
+            )
+            applied.extend(applied2)
+            result = BackendResult(raw=result.raw + "\n" + result2.raw, model=result.model, usage=_merge_usage(result.usage, result2.usage))
+            warnings.append(f"pass 2 ({target} -> {changed}): {len(applied2)} edit(s)")
         verification = None
         verify_on = req.options.verify if req.options.verify is not None else bool(self.cfg.verify.get("enabled", False))
         if verify_on and target == "code" and applied:
