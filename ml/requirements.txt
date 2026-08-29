@@ -1,0 +1,13 @@
+torch>=2.2
+transformers>=4.44
+peft>=0.12
+accelerate>=0.32
+datasets>=2.19
+omegaconf>=2.3
+wandb>=0.17
+modal>=0.62
+python-dotenv>=1.0
+openai>=3.0
+pydantic>=2.5
+tree-sitter-language-pack>=0.7
+tqdm>=4.66

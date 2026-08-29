@@ -1,0 +1,35 @@
+# Training defaults (Phase 4). extends base.yaml so the prompt/segment/window settings used to
+# render training examples are the same ones the server uses.
+extends: base.yaml
+device: null                    # null = cuda if available else cpu
+
+model:
+  name: "Qwen/Qwen2.5-Coder-1.5B-Instruct"
+  dtype: "bfloat16"
+
+lora:
+  r: 32
+  alpha: 64
+  dropout: 0.05
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+
+train:
+  autocast_dtype: "bfloat16"
+
+sft:
+  train_path: "/data/datasets/prosesync/v1/train.jsonl"   # rendered examples (dataset.py render)
+  val_path: "/data/datasets/prosesync/v1/val.jsonl"
+  out_dir: "/data/outputs/sft"
+  epochs: 2
+  batch_size: 4
+  lr: 2.0e-4
+  weight_decay: 0.0
+  warmup_steps: 20
+  max_length: 4096
+  grad_clip: 1.0
+  log_interval: 10
+  eval_every: 100
+  save_every: 200
+  max_train_examples: null
+  max_val_examples: 200
+  max_steps: null
