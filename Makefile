@@ -1,5 +1,5 @@
 PY := .venv/bin/python
-.PHONY: setup test test-sync test-ext build-ext serve gen sync eval lint
+.PHONY: setup test test-sync test-ext build-ext serve gen sync eval lint seed synth export-interactions data-stats
 
 setup:            ## venv + python deps + extension deps
 	python3 -m venv .venv && $(PY) -m pip install -q -U pip && $(PY) -m pip install -q -e "./sync[develop]"
@@ -30,3 +30,16 @@ eval:             ## make eval [BACKEND=mock] [ITEMS=ml/data/eval_v1.jsonl]
 
 lint:
 	.venv/bin/ruff check sync ml
+
+# ---- data pipeline (Phase 3)
+seed:             ## make seed DIRS="~/project/foo ~/project/bar" [MAX=200]
+	$(PY) ml/src/data/seed_corpus.py --dirs $(DIRS) --out ml/data/seed --max $(or $(MAX),200)
+
+synth:            ## make synth [PER_FILE=2] [LIMIT=0] [BACKEND=mock]
+	$(PY) ml/src/data/perturb.py --manifest ml/data/seed/manifest.jsonl --out ml/data/synth.jsonl --per-file $(or $(PER_FILE),2) --limit $(or $(LIMIT),0) $(if $(BACKEND),--backend $(BACKEND))
+
+export-interactions:
+	$(PY) ml/src/data/interactions_export.py --out ml/data/interactions.jsonl
+
+data-stats:
+	$(PY) ml/src/data/dataset.py stats ml/data/synth.jsonl; $(PY) ml/src/data/dataset.py stats ml/data/interactions.jsonl

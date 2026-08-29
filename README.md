@@ -98,6 +98,22 @@ tree-sitter (any language) and `ast.parse` (Python), plus any per-language comma
 repair round with the error; if the repaired edits pass they replace the first attempt, otherwise the
 extension shows a warning with the failing line and the sync is marked unverified.
 
+## Data pipeline (Phase 3)
+
+```sh
+make seed DIRS="~/project/foo ~/project/bar"   # local repos -> ml/data/seed/ (20-300 line files, deduped)
+make synth PER_FILE=2                           # generate prose, propose small edits, sync -> ml/data/synth.jsonl
+make export-interactions                        # ~/.prosecode/logs -> ml/data/interactions.jsonl (real usage)
+make data-stats
+.venv/bin/python ml/src/data/dataset.py render ml/data/synth.jsonl > /tmp/train.jsonl   # chat examples
+```
+
+Records (`ml/src/data/records.py`) hold the synced snapshot, the user's edited side, and the
+block-op label; `dataset.py` renders them with the **same** `build_sync_messages` / realign /
+window code the server uses, so training prompts equal serving prompts by construction.
+Synthetic records are produced by the production engine itself (propose an edit → `Engine.sync`),
+so labels match the serving distribution; real interactions carry accept/modify/revert outcomes.
+
 ## Evaluate a backend
 
 ```sh

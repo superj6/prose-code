@@ -44,3 +44,14 @@ PARAGRAPHS_SCHEMA = {
     },
     "required": ["paragraphs"],
 }
+
+PERTURB_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "block": {"type": "string"},
+        "text": {"type": "string", "description": "Full new text of the block on the edited side"},
+        "label": {"type": "string", "description": "Short description of the change, e.g. 'add None guard'"},
+    },
+    "required": ["block", "text", "label"],
+}
