@@ -13,5 +13,8 @@ Read all lines from `ledger_file` and turn them into transactions with `parse_li
 ## main
 Parse either the supplied `argv` list or the process command line, run the selected report, print its text to standard output, and return `0` on success. Catch `LedgerError`, print an `error: ...` diagnostic to standard error, and return `1` so command-line failures are reflected in the process status.
 
+## test
+unit tests
+
 ## b6
 When the module is executed directly, invoke `main()` and terminate the process with the exit code it returns; importing the module does not run the command.

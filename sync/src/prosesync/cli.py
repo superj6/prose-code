@@ -188,7 +188,7 @@ def main(argv=None) -> int:
     _env()
     p = argparse.ArgumentParser(prog="prosesync")
     p.add_argument("--config", default=None, help="YAML config (default configs/base.yaml)")
-    p.add_argument("--override", nargs="*", default=None, help="dotlist overrides, e.g. sync.model=gpt-x")
+    p.add_argument("--override", action="append", default=None, help="dotlist override, repeatable: --override sync.model=gpt-x --override verify.enabled=true")
     p.add_argument("--backend", default=None, help="openai | mock")
     sub = p.add_subparsers(dest="cmd", required=True)
 
