@@ -2,19 +2,86 @@
 
 Edit a program as **English prose** or as **source code** — side by side — and the other side follows.
 
-```
-examples/snippets/calc.py                     examples/snippets/calc.py.prose
-───────────────────────────────      ──────────────────────────────────────────────
-def evaluate(tokens):                ## evaluate
-    if not tokens:                   Fold `tokens` left to right with no precedence.
-        return 0.0                   Return `0.0` for an empty list.
-    ...
+## What it looks like
+
+A source file and its prose live side by side. The prose is free-form English; the only structure
+is a `# file` summary and, on every other paragraph, a `## names` line saying which code units it
+describes. From `examples/ledger/ledger/parsing.py`:
+
+<table><tr><th>parsing.py</th><th>parsing.py.prose</th></tr><tr><td>
+
+```python
+def parse_amount(text: str) -> int:
+    """'-12.50' -> -1250. Accepts a leading sign
+    and up to two decimals."""
+    m = re.fullmatch(r"([+-]?)(\d+)(?:\.(\d{1,2}))?", text.strip())
+    if not m:
+        raise LedgerError(f"bad amount {text!r}")
+    sign, whole, frac = m.groups()
+    cents = int(whole) * 100 + int((frac or "0").ljust(2, "0"))
+    return -cents if sign == "-" else cents
 ```
 
-The prose is a *synchronised view* of the code, not a replacement: the code is what runs, both
-files are committed, and an LLM keeps them consistent with block-level minimal edits. See
-[`docs/prose-grammar.md`](docs/prose-grammar.md) for the prose contract and
-[`docs/roadmap.md`](docs/roadmap.md) for where this is going (custom model, etc.).
+</td><td>
+
+```
+# parsing.py
+This module parses a simple line-oriented ledger
+format into `Transaction` objects. …
+
+## parse_amount
+Convert a signed decimal currency string into an
+integer number of cents. Strip surrounding
+whitespace, require digits with an optional
+leading `+` or `-`, and allow zero, one, or two
+fractional digits; … Reject any other form with
+`LedgerError`.
+```
+
+</td></tr></table>
+
+**Edit the code** — make `parse_amount` strip commas (`text.strip().replace(",", "")`). About two
+seconds later the prose paragraph annotated `## parse_amount` reads "Strip surrounding whitespace
+and commas, …". Nothing else in the file is touched, and the directory prose is left alone because
+the file's summary did not change.
+
+**Edit the prose** — in `reports.py.prose`, find the paragraph annotated `## top_categories` and
+append "ties between categories with equal spend are broken by the category's most recent
+transaction date (later first) instead of alphabetically". Only the `top_categories` block (plus its
+neighbours as context) is sent to the model; the diff that comes back:
+
+```diff
++    latest_when = {}
+     for tx in transactions:
+         if tx.is_expense:
+             totals[tx.category] += -tx.amount_cents
++            if tx.category not in latest_when or tx.when > latest_when[tx.category]:
++                latest_when[tx.category] = tx.when
+-    ranked = sorted(totals.items(), key=lambda kv: (-kv[1], kv[0]))
++    ranked = sorted(totals.items(), key=lambda kv: kv[0])
++    ranked = sorted(ranked, key=lambda kv: latest_when[kv[0]], reverse=True)
++    ranked = sorted(ranked, key=lambda kv: -kv[1])
+```
+
+The ledger's tests still pass afterwards. Both directions are the same mechanism: the changed
+side's blocks select, through the annotations, the blocks on the other side that may change; the
+model returns block-level edits; everything else is preserved verbatim.
+
+**Directories** get a `DIR.prose` written from the children's prose — from `examples/ledger/ledger/DIR.prose`:
+
+```
+# ledger/
+This package implements a compact personal-finance ledger, covering the full path from
+line-oriented input to validated transactions, optional rule-based categorisation, …
+
+## models.py, parsing.py
+`models.py` defines the ledger's fundamental data structures: immutable dated transactions with
+integer-cent amounts and mutable accounts … `parsing.py` turns ledger text into those transactions …
+```
+
+Change a file's summary and the paragraphs naming that file follow (upward); edit a paragraph here
+and the children it names are updated, then their code (push-down). Name a file that does not exist
+yet — "`## export.py` writes a report as CSV" — and it is created.
 
 ## Layout
 
