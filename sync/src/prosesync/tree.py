@@ -167,7 +167,11 @@ async def _sync_dir(engine: Engine, d: Path, changed: str, sidecar_dir: str, bro
     resp = await engine.sync(req)
     prose_path.write_text(resp.prose)
     if save:
-        store.save_snapshot(dir_code_path(d), Snapshot(prose=resp.prose, code=resp.code, blocks=resp.blocks))
+        # For an upward sync the snapshot must hold the REAL synthetic document: when DIR.prose had
+        # unpushed user edits, pass 2 edited child summaries only virtually (resp.code); recording
+        # that would make the next propagation mistake the unchanged children for a change.
+        code = doc if changed == "code" else resp.code
+        store.save_snapshot(dir_code_path(d), Snapshot(prose=resp.prose, code=code, blocks=resp.blocks))
     return resp
 
 
@@ -188,6 +192,8 @@ async def propagate_up(engine: Engine, code_path: Path, sidecar_dir: str = "", m
             result.unchanged.append(dir_prose_path(d))
             break
         result.synced.append((dir_prose_path(d), len(resp.line_edits)))
+        if any(le.side == "code" for le in resp.line_edits):
+            result.errors.append((dir_prose_path(d), "has unpushed edits; run push-down to apply them to the children"))
         if summary_text(resp.prose) == before or d.parent == d:
             break  # this directory's own summary did not change: parents are unaffected
         d = d.parent

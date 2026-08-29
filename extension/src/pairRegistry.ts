@@ -131,7 +131,7 @@ export class PairRegistry implements vscode.Disposable {
         verify: s.verify,
         feedbackWindowS: s.feedbackWindowS,
         onSnapshot: (snap) => saveSnapshot(codePath, snap),
-        onSynced: () => void this.propagateUp(codePath),
+        onSynced: () => this.propagateUp(codePath),
         log: (line) => this.out.appendLine(line),
       },
     );
@@ -139,15 +139,34 @@ export class PairRegistry implements vscode.Disposable {
     this.out.appendLine(`[pair] open ${codePath} <-> ${prosePath}`);
   }
 
-  /** After a file sync, refresh ancestor DIR.prose files (server writes them; open editors reload). */
-  async propagateUp(codePath: string): Promise<void> {
+  private readonly propagateTimers = new Map<string, NodeJS.Timeout>();
+
+  /** After a file sync, refresh ancestor DIR.prose files (server writes them; open editors reload).
+   *  Coalesced per directory: a burst of syncs in one directory yields one propagation. */
+  propagateUp(codePath: string, delayMs = 3000): void {
     const s = this.settings();
     if (!s.propagateUp) return;
+    const dir = path.dirname(codePath);
+    const pending = this.propagateTimers.get(dir);
+    if (pending) clearTimeout(pending);
+    this.propagateTimers.set(
+      dir,
+      setTimeout(() => {
+        this.propagateTimers.delete(dir);
+        void this.propagateUpNow(codePath);
+      }, delayMs),
+    );
+  }
+
+  private async propagateUpNow(codePath: string): Promise<void> {
+    const s = this.settings();
     try {
       const r = await this.client.tree("propagate_up", codePath, s.sidecarDir);
       for (const x of r.synced) this.out.appendLine(`[tree] ${x.path}: ${x.edits} edit(s)`);
       for (const e of r.errors) this.out.appendLine(`[tree] error ${e.path}: ${e.error}`);
       if (r.synced.length) this.status.set("idle", `updated ${r.synced.length} DIR.prose`);
+      const unpushed = r.errors.find((e) => e.error.includes("unpushed"));
+      if (unpushed) void vscode.window.showWarningMessage(`Prose Code: ${path.basename(path.dirname(unpushed.path))}/DIR.prose has unpushed edits — run "Push Down" to apply them.`);
     } catch (e) {
       this.out.appendLine(`[tree] propagate_up failed: ${(e as Error).message}`);
     }
@@ -196,6 +215,8 @@ export class PairRegistry implements vscode.Disposable {
   }
 
   dispose(): void {
+    for (const t of this.propagateTimers.values()) clearTimeout(t);
+    this.propagateTimers.clear();
     this.forEach((m) => m.dispose());
     this.pairs.clear();
   }

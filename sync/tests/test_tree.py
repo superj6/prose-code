@@ -76,3 +76,19 @@ def test_replace_summary_roundtrip():
     assert tree.replace_summary(prose, "f.py", "New one.") == "# f.py\nNew one.\n\n## g\nBody.\n"
     assert tree.replace_summary("## g\nBody.\n", "f.py", "Added.") == "# f.py\nAdded.\n\n## g\nBody.\n"
     assert tree.summary_text("no summary\n") is None
+
+
+def test_propagate_up_with_dirty_dir_prose_keeps_real_doc_in_snapshot(engine, project):
+    asyncio.run(tree.generate_tree(engine, project))
+    dir_prose = project / "DIR.prose"
+    # the user's unpushed edit is on the sub/ paragraph (b2); the child change hits a.py (b1)
+    dir_prose.write_text(dir_prose.read_text().replace("Block b2: describes `## sub/`", "Block b2: describes `## sub/` (unpushed)"))
+    a = project / "a.py"
+    ap = store.prose_path(a)
+    ap.write_text(tree.replace_summary(ap.read_text(), "a.py", "Changed summary."))
+    result = asyncio.run(tree.propagate_up(engine, a))
+    assert result.synced and any("unpushed" in e for _, e in result.errors)
+    snap = store.load_snapshot(tree.dir_code_path(project))
+    assert snap.code == tree.synthetic_doc(tree.children(project))  # real children, not the virtual pass-2 edits
+    assert "(unpushed)" in dir_prose.read_text()  # the user's edit survived
+    assert asyncio.run(tree.propagate_up(engine, a)).synced == []  # and nothing spurious happens next time
